@@ -40,11 +40,21 @@ dependencies {
 	//compile "golem:golem-backend-mtj:0.7"
 	//compile group: "golem", name:"golem-backend-mtj", version: "0.7"
 	//compile group: "golem", name:"golem-core", version: "0.7"
-	compile "org.nd4j:nd4j-native:0.7.0"
-    compile "org.nd4j:nd4j-native-platform:0.4.0"
+	//compile "org.nd4j:nd4j-native:0.7.1" // In theory this should be enough for OSX/Linux/Windows, but it's not.
+    compile "org.nd4j:nd4j-native-platform:0.4.0" // This is a HUGE jar with all the deps for all platforms and mobile.
 	
 }
 
 task wrapper(type: Wrapper) {
 	gradleVersion = "2.7"
 }
+
+jar {
+		manifest {
+				attributes(
+						'Class-Path': configurations.compile.collect { it.getName() }.join(' '),
+						'Main-Class': mainClassName
+				)
+		}
+}
+

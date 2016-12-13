@@ -1,17 +1,34 @@
 package com.josephcatrambone.cg4j
 
 import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.convolution.Convolution
 import org.nd4j.linalg.factory.Nd4j
+import org.nd4j.linalg.ops.transforms.Transforms
 import sun.plugin.dom.exception.InvalidStateException
-import org.nd4j.linalg.ops.transforms.Transforms.*
 
 //import org.nd4j.linalg.api.ops.impl.transforms.Tanh
 
 class Graph {
+	var buildInstructions = mutableListOf<String>()
 	var shapes = arrayOf<IntArray>()
 	var inputs = arrayOf<IntArray>()
+	var variables = mutableMapOf<Int, INDArray>()
 	var operations = arrayOf< (Array<INDArray>)->INDArray >() // Node operations
 	var adjointOperations = arrayOf< (Array<INDArray>, INDArray)->Array<INDArray> >() // Operation from forward activation + parent adjoint -> child adjoint modifications.
+
+	fun toText(): String {
+		val sb = StringBuilder()
+		// Add build instructions.
+		buildInstructions.forEach { s -> sb.append(s); sb.append("\n") }
+		// Save the variables.
+		sb.append("variables")
+		variables.forEach { ent -> sb.append(ent.key); sb.append("\n"); sb.append(ent.value.toString()) }
+		return ""
+	}
+
+	fun fromText(net: String) {
+
+	}
 
 	fun getOutput(output: Int, inputSet: Map<Int, INDArray>): INDArray {
 		return forward(output, inputSet)[output]!!
@@ -72,150 +89,199 @@ class Graph {
 		return adjointCache
 	}
 
+	fun addNode(instruction: String, shape: IntArray, input: IntArray, operation: (Array<INDArray>)->INDArray, adjoint: (Array<INDArray>, INDArray)->Array<INDArray>): Int {
+		this.buildInstructions.add(instruction)
+		this.shapes = this.shapes.plus(shape)
+		this.inputs = this.inputs.plus(input)
+		this.operations = this.operations.plus(operation)
+		this.adjointOperations = this.adjointOperations.plus(adjoint)
+		return shapes.size-1
+	}
+
 	// And now add the actual node types.
 
-	fun addInput(vararg shape : Int): Int {
-		shapes = shapes.plus(shape)
-		inputs = inputs.plus(intArrayOf())
-		operations = operations.plus( { x -> throw InvalidStateException("The 'operation' method was called on an input, which means it was unspecified in the input stream.") } )
-		adjointOperations = adjointOperations.plus( { a, b -> arrayOf() } )
-		return shapes.size-1
+	fun input(vararg shape : Int): Int {
+		return addNode(
+			"input",
+			shape,
+			intArrayOf(),
+			{ x -> throw InvalidStateException("The 'operation' method was called on an input, which means it was unspecified in the input stream.") },
+			{ a, b -> arrayOf() }
+		)
+	}
+
+	fun variable(vararg shape: Int): Int {
+		val variableIndex = shapes.size // Force the shapes to match up with the variable index.
+		variables[variableIndex] = Nd4j.zeros(*shape)
+		return addNode(
+			"variable",
+			shape,
+			intArrayOf(),
+			{ x -> this.variables[variableIndex]!! },
+			{ a, b -> arrayOf() }
+		)
 	}
 
 	// NOTE: THESE MAY BE MADE OBSOLETE BY THE BROADCAST OPERATOR
-	fun addAddConstant(left: Int, cons: Float): Int {
-		shapes = shapes.plus(shapes[left])
-		inputs = inputs.plus(intArrayOf(left))
-		operations = operations.plus({ x -> x[0].add(cons) })
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint -> arrayOf(parentAdjoint) })
-		return shapes.size-1
+	fun constantAdd(left: Int, cons: Float): Int {
+		return addNode(
+			"constant",
+			shapes[left],
+			intArrayOf(left),
+			{ x -> x[0].add(cons) },
+			{ forwards, parentAdjoint -> arrayOf(parentAdjoint) }
+		)
 	}
 
-	fun addMultiplyConstant(left: Int, cons: Float): Int {
-		shapes = shapes.plus(shapes[left])
-		inputs = inputs.plus(intArrayOf(left))
-		operations = operations.plus({ x -> x[0].mul(cons) })
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint -> arrayOf(parentAdjoint.mul(cons)) })
-		return shapes.size-1
+	fun constantMultiply(left: Int, cons: Float): Int {
+		return addNode(
+			"multiplyConstant",
+			shapes[left],
+			intArrayOf(left),
+			{ x -> x[0].mul(cons) },
+			{ forwards, parentAdjoint -> arrayOf(parentAdjoint.mul(cons)) }
+		)
 	}
 	// END
 
-	fun addAdd(left: Int, right: Int): Int {
-		shapes = shapes.plus(shapes[left])
-		inputs = inputs.plus(intArrayOf(left, right))
-		operations = operations.plus({ x -> x[0].add(x[1]) })
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint -> arrayOf(parentAdjoint, parentAdjoint) })
-		return shapes.size-1
+	fun add(left: Int, right: Int): Int {
+		return addNode(
+			"add",
+			shapes[left],
+			intArrayOf(left, right),
+			{ x -> x[0].add(x[1]) },
+			{ forwards, parentAdjoint -> arrayOf(parentAdjoint, parentAdjoint) }
+		)
 	}
 
-	fun addSubtract(left: Int, right: Int): Int {
-		shapes = shapes.plus(shapes[left])
-		inputs = inputs.plus(intArrayOf(left, right))
-		operations = operations.plus({ x ->
-			x[0].sub(x[1])
-		})
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint ->
-			arrayOf(
-				parentAdjoint,
-				parentAdjoint.neg()
-			)
-		})
-		return shapes.size-1
+	fun subtract(left: Int, right: Int): Int {
+		return addNode(
+			"subtract",
+			shapes[left],
+			intArrayOf(left, right),
+			{ x -> x[0].sub(x[1]) },
+			{ forwards, parentAdjoint ->
+				arrayOf(
+					parentAdjoint,
+					parentAdjoint.neg()
+				)
+			}
+		)
 	}
 
-	fun addElementMultiply(left: Int, right: Int): Int {
-		shapes = shapes.plus(shapes[left])
-		inputs = inputs.plus(intArrayOf(left, right))
-		operations = operations.plus({ x ->
-			val a = x[0]
-			val b = x[1]
-			a.mul(b)
-		})
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint ->
-			arrayOf(
-				forwards[1].mul(parentAdjoint),
-				forwards[0].mul(parentAdjoint)
-			)
-		})
-		return shapes.size-1
+	fun elementMultiply(left: Int, right: Int): Int {
+		return addNode(
+			"elementMultiply",
+			shapes[left],
+			intArrayOf(left, right),
+			{ x -> x[0].mul(x[1]) },
+			{ forwards, parentAdjoint ->
+				arrayOf(
+					forwards[1].mul(parentAdjoint),
+					forwards[0].mul(parentAdjoint)
+				)
+			}
+		)
 	}
 
-	fun addMatrixMultiply(left: Int, right: Int): Int {
-		shapes = shapes.plus(intArrayOf(shapes[left][0], shapes[right][1]))
-		inputs = inputs.plus(intArrayOf(left, right))
-		operations = operations.plus({ x -> x[0].mmul(x[1]) })
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint ->
-			arrayOf(
-				// Left adjoint. If C=AB, adj(a) = adj(c)*bT
-				parentAdjoint.mmul(forwards[1].transpose()),
-				// Right adjoint.  adj(b) = aT*adj(c)
-				forwards[0].transpose().mmul(parentAdjoint)
-			)
-		})
-		return shapes.size-1
+	fun matrixMultiply(left: Int, right: Int): Int {
+		return addNode(
+			"matrixMultiply",
+			intArrayOf(shapes[left][0], shapes[right][1]),
+			intArrayOf(left, right),
+			{ x -> x[0].mmul(x[1]) },
+			{ forwards, parentAdjoint ->
+				arrayOf(
+					// Left adjoint. If C=AB, adj(a) = adj(c)*bT
+					parentAdjoint.mmul(forwards[1].transpose()),
+					// Right adjoint.  adj(b) = aT*adj(c)
+					forwards[0].transpose().mmul(parentAdjoint)
+				)
+			}
+		)
 	}
 
-	fun addTanh(operand: Int): Int {
-		shapes = shapes.plus(shapes[operand].copyOf())
-		inputs = inputs.plus(intArrayOf(operand))
-		operations = operations.plus({ x -> tanh(x[0]) })
+	fun tanh(operand: Int): Int {
+		return addNode(
+			"tanh",
+			shapes[operand].copyOf(),
+			intArrayOf(operand),
+			{ x -> Transforms.tanh(x[0]) },
 		// y := EW(x, op) -> y = tanh(x)
 		// x_adj += EW(y_adj, EW(x, d_op), dot)
 		// f(x) = tanh(x).  df(x) = 1 - tanh(x)^2
 		// x_adj += y_adj * d_op(x)
-		adjointOperations = adjointOperations.plus({ forwards, parentAdjoint ->
-			arrayOf(
-				// adjoint[operand][i] += adjoint[node][i]*(1.0f - (tanh(forward[operand][i])*tanh(forward[operand][i])));
-				//parentAdjoint.mul(Nd4j.onesLike(parentAdjoint).sub(forwards[thisId].mul(forwards[thisId])))
-				parentAdjoint.mul(Nd4j.onesLike(parentAdjoint).sub(tanh(forwards[0]).mul(tanh(forwards[0]))))
-			)
-		})
-		return shapes.size-1
+			{ forwards, parentAdjoint ->
+				arrayOf(
+					// adjoint[operand][i] += adjoint[node][i]*(1.0f - (tanh(forward[operand][i])*tanh(forward[operand][i])));
+					//parentAdjoint.mul(Nd4j.onesLike(parentAdjoint).sub(forwards[thisId].mul(forwards[thisId])))
+					parentAdjoint.mul(Nd4j.onesLike(parentAdjoint).sub(Transforms.tanh(forwards[0]).mul(Transforms.tanh(forwards[0]))))
+				)
+			}
+		)
 	}
 
-	fun addAddWithBroadcast(targetNodeToMatch: Int, operandToBroadcast: Int): Int {
-		shapes = shapes.plus(shapes[targetNodeToMatch].copyOf())
-		inputs = inputs.plus(intArrayOf(targetNodeToMatch, operandToBroadcast))
-		operations = operations.plus({ x -> x[1]!!.repmat(*x[0]!!.shape()) })
-		adjointOperations = adjointOperations.plus({ forwards, thisAdjoint ->
-			throw NotImplementedError("Still working on backprop with broadcast.")
-			arrayOf(
-				// TODO: Start here.
-			)
-		})
-		return shapes.size-1
+	fun addWithBroadcast(targetNodeToMatch: Int, operandToBroadcast: Int): Int {
+		return addNode(
+			"addWithBroadcast",
+			shapes[targetNodeToMatch].copyOf(),
+			intArrayOf(targetNodeToMatch, operandToBroadcast),
+			{ x -> x[1].repmat(*x[0].shape()) },
+			{ forwards, thisAdjoint ->
+				throw NotImplementedError("Still working on backprop with broadcast.")
+				arrayOf(
+					// TODO: Start here.
+				)
+			}
+		)
 	}
 
-	fun addPower(base: Int, exp: Float): Int { // x^c is supported.  c^x is not yet supported.
-		shapes = shapes.plus(shapes[base].copyOf())
-		inputs = inputs.plus(intArrayOf(base))
-		operations = operations.plus({ x -> pow(x[0]!!, exp)})
+	fun power(base: Int, exp: Float): Int { // x^c is supported.  c^x is not yet supported.
+		return addNode(
+			"power",
+			shapes[base].copyOf(),
+			intArrayOf(base),
+			{ x -> Transforms.pow(x[0], exp) },
 		// x_adj += EW(y_adj, EW(x, d_op), dot)
 		// d/dx 1/x = d/dx x^-1 = -(x^-2) = -(1/x^2)
-		adjointOperations = adjointOperations.plus({ forwards, thisAdjoint ->
-			arrayOf(
-					thisAdjoint.mul(pow(forwards[0], exp-1.0f).mul(exp))
-			)
-		})
-		return shapes.size - 1
+			{ forwards, thisAdjoint ->
+				arrayOf(
+					thisAdjoint.mul(Transforms.pow(forwards[0], exp-1.0f).mul(exp))
+				)
+			}
+		)
 	}
 
-	fun addAbs(oper: Int): Int {
-		shapes = shapes.plus(shapes[oper].copyOf())
-		inputs = inputs.plus(intArrayOf(oper))
-		operations = operations.plus({ x -> abs(x[0]!!) })
+	fun abs(oper: Int): Int {
+		return addNode(
+			"abs",
+			shapes[oper].copyOf(),
+			intArrayOf(oper),
+			{ x -> Transforms.abs(x[0]) },
 		// x_adj += EW(y_adj, EW(x, d_op), dot)
-		adjointOperations = adjointOperations.plus({ forwards, thisAdjoint ->
-			arrayOf(
-				thisAdjoint.mul(sign(forwards[0]))
-			)
-		})
-		return shapes.size - 1
+			{ forwards, thisAdjoint ->
+				arrayOf(
+					thisAdjoint.mul(Transforms.sign(forwards[0]))
+				)
+			}
+		)
 	}
 
-	fun addConvolution(inputMatrix: Int, convolutionKernel: Int): Int {
-		// TODO: Implement.
-		throw NotImplementedError("Need to work on convolution.")
+	fun convolution2D(inputMatrix: Int, convolutionKernel: Int, stride: Int): Int {
+		// Input: Volume of W1 H1 D1
+		// Params: K -> # filters, F -> Spatial extent, S -> Stride, P -> Padding.
+		// Output: W2 = (W1 - F + 2P)/S + 1 || H2 is like W2 || D2 = K
+
+		return addNode(
+			"conv2D",
+			intArrayOf(), // TODO:
+			intArrayOf(inputMatrix, convolutionKernel),
+			{ x -> Convolution.conv2d(x[0], x[1], Convolution.Type.SAME) },
+			{ forwards, thisAdjoint -> arrayOf() } // TODO:
+		)
+	}
+
+	fun deconvolution2D(inputMatrix: Int, deconvolutionKernel: Int, stride: Int): Int {
 		return -1
 	}
 }

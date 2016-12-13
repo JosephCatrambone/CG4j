@@ -8,10 +8,11 @@ fun main(args : Array<String>) {
 	//var a: INDArray = Nd4j.create(floatArrayOf(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f), intArrayOf(2, 3))
 	//println("Hello world: $a");
 
-	gradCheck()
+	//gradCheck()
 	//linearRegression()
 	//linearRegression2()
-	//learnXOR()
+	learnXOR()
+	//testRNN()
 }
 
 fun gradCheck() {
@@ -20,25 +21,25 @@ fun gradCheck() {
 	}
 
 	val g = Graph()
-	val x = g.addInput(1, 9)
+	val x = g.input(1, 9)
 
 	// Test tanh.
-	//val out = g.addTanh(x)
+	//val out = g.tanh(x)
 	//val f : (Float)->Float = { x -> Math.tanh(x.toDouble()).toFloat() };
 	// Test x^2
-	//val out = g.addElementMultiply(x, x)
+	//val out = g.elementMultiply(x, x)
 	//val f : (Float)->Float = { x -> x*x };
 	// Test x+x
-	//val out = g.addAdd(x, x)
+	//val out = g.add(x, x)
 	//val f : (Float)->Float = { x -> x+x };
 	// Test x-x
-	//val out = g.addSubtract(x, x)
+	//val out = g.subtract(x, x)
 	//val f : (Float)->Float = {x -> x-x } // Basically zero.  d/dx x wrt x = 1.  d/dx -x wrt x = -1.  1 + -1 = 0.
 	// Test 1/x
-	//val out = g.addPower(x, -1f)
+	//val out = g.power(x, -1f)
 	//val f : (Float)->Float = {x -> Math.pow(x.toDouble(), -1.0).toFloat() }
 	// Test something else.
-	val out = g.addMultiplyConstant(x, 10f)
+	val out = g.constantMultiply(x, 10f)
 	val f : (Float)->Float = {x -> x*10f}
 
 	val dx = 1.0e-4f;
@@ -64,14 +65,14 @@ fun gradCheck() {
 fun linearRegression() {
 	val g = Graph()
 
-	val x = g.addInput(1, 1)
-	val m = g.addInput(1, 1)
-	val b = g.addInput(1, 1)
-	val out = g.addAdd(g.addElementMultiply(x, m), b)
+	val x = g.input(1, 1)
+	val m = g.input(1, 1)
+	val b = g.input(1, 1)
+	val out = g.add(g.elementMultiply(x, m), b)
 
-	val y = g.addInput(1, 1)
-	val error = g.addSubtract(y, out)
-	val squaredError = g.addElementMultiply(error, error)
+	val y = g.input(1, 1)
+	val error = g.subtract(y, out)
+	val squaredError = g.elementMultiply(error, error)
 
 	val mData = Nd4j.create(floatArrayOf(0.1f))
 	val bData = Nd4j.create(floatArrayOf(0.5f))
@@ -101,13 +102,13 @@ fun linearRegression() {
 fun linearRegression2() {
 	val g = Graph()
 
-	val x = g.addInput(1, 2)
-	val m = g.addInput(2, 1)
-	val out = g.addMatrixMultiply(x, m)
+	val x = g.input(1, 2)
+	val m = g.input(2, 1)
+	val out = g.matrixMultiply(x, m)
 
-	val y = g.addInput(1, 1)
-	val error = g.addSubtract(y, out)
-	val squaredError = g.addElementMultiply(error, error)
+	val y = g.input(1, 1)
+	val error = g.subtract(y, out)
+	val squaredError = g.elementMultiply(error, error)
 
 	val mData = Nd4j.create(arrayOf(floatArrayOf(0.1f), floatArrayOf(0.2f)))
 
@@ -131,35 +132,35 @@ fun linearRegression2() {
 }
 
 fun learnXOR() {
-	val LEARNING_RATE = 0.01f
-	val ITERATIONS = 100000
+	val LEARNING_RATE = 0.05f
+	val ITERATIONS = 10000
 	val BATCH_SIZE = 1
 
 	val g = Graph()
 	// Inputs
-	val x = g.addInput(1, 2)
-	val y = g.addInput(1, 1)
+	val x = g.input(1, 2)
+	val y = g.input(1, 1)
 	// Variables
-	val w_xh = g.addInput(2, 3)
-	val w_hy = g.addInput(3, 1)
-	val b_h = g.addInput(3, 1)
-	val b_y = g.addInput(1, 1)
+	val w_xh = g.variable(2, 3)
+	val w_hy = g.variable(3, 1)
+	val b_h = g.variable(3, 1)
+	val b_y = g.variable(1, 1)
 	// Structure
-	val hidden_preact = g.addMatrixMultiply(x, w_xh)
-	val hidden_biased = g.addAdd(hidden_preact, b_h) // TODO: Need broadcast-add
-	val hidden = g.addTanh(hidden_biased)
-	val output_preact = g.addMatrixMultiply(hidden, w_hy)
-	val output_biased = g.addAdd(output_preact, b_y)
-	val out = g.addTanh(output_biased)
+	val hidden_preact = g.matrixMultiply(x, w_xh)
+	val hidden_biased = g.add(hidden_preact, b_h) // TODO: Need broadcast-add
+	val hidden = g.tanh(hidden_biased)
+	val output_preact = g.matrixMultiply(hidden, w_hy)
+	val output_biased = g.add(output_preact, b_y)
+	val out = g.tanh(output_biased)
 	// Error calculation
-	val difference = g.addSubtract(y, out)
-	val squaredError = g.addElementMultiply(difference, difference)
+	val difference = g.subtract(y, out)
+	val squaredError = g.elementMultiply(difference, difference)
 
 	// Allocate data.
-	val weightData_xh = Nd4j.rand(2, 3).mul(0.1)
-	val weightData_hy = Nd4j.rand(3, 1).mul(0.1)
-	val biasData_h = Nd4j.zeros(3, 1)
-	val biasData_y = Nd4j.zeros(1, 1)
+	g.variables[w_xh] = Nd4j.rand(2, 3).mul(0.1)
+	g.variables[w_hy] = Nd4j.rand(3, 1).mul(0.1)
+	g.variables[b_h] = Nd4j.zeros(3, 1)
+	g.variables[b_y] = Nd4j.zeros(1, 1)
 
 	// Iteratively fix.
 	for(iteration in (0..ITERATIONS)) {
@@ -174,54 +175,84 @@ fun learnXOR() {
 		//}
 		val inputMap = mapOf(
 			x to xData,
-			y to yData,
-			w_xh to weightData_xh,
-			w_hy to weightData_hy,
-			b_h to biasData_h,
-			b_y to biasData_y
+			y to yData
 		)
 		val fwd = g.forward(squaredError, inputMap)
 		val grad = g.reverse(squaredError, inputMap, fwd)
 
-		weightData_xh.subi(grad[w_xh]!!.mul(LEARNING_RATE))
-		weightData_hy.subi(grad[w_hy]!!.mul(LEARNING_RATE))
-		biasData_h.subi(grad[b_h]!!.mul(LEARNING_RATE))
+		g.variables[w_xh]!!.subi(grad[w_xh]!!.mul(LEARNING_RATE))
+		g.variables[w_hy]!!.subi(grad[w_hy]!!.mul(LEARNING_RATE))
+		g.variables[b_h]!!.subi(grad[b_h]!!.mul(LEARNING_RATE))
 		// Currently, including bias makes everything go screwy.  TODO: Problem in bias init or bias add?
 		//biasData_y.subi(grad[b_y]!!.mul(LEARNING_RATE))
 
-		print(g.getOutput(out, mapOf(
-				x to Nd4j.create(floatArrayOf(0.0f, 0.0f)),
-				w_xh to weightData_xh,
-				w_hy to weightData_hy,
-				b_h to biasData_h,
-				b_y to biasData_y
-		)))
-		print("\t")
-		print(g.getOutput(out, mapOf(
-				x to Nd4j.create(floatArrayOf(1.0f, 0.0f)),
-				w_xh to weightData_xh,
-				w_hy to weightData_hy,
-				b_h to biasData_h,
-				b_y to biasData_y
-		)))
-		print("\t")
-		print(g.getOutput(out, mapOf(
-				x to Nd4j.create(floatArrayOf(1.0f, 0.0f)),
-				w_xh to weightData_xh,
-				w_hy to weightData_hy,
-				b_h to biasData_h,
-				b_y to biasData_y
-		)))
-		print("\t")
-		print(g.getOutput(out, mapOf(
-				x to Nd4j.create(floatArrayOf(1.0f, 1.0f)),
-				w_xh to weightData_xh,
-				w_hy to weightData_hy,
-				b_h to biasData_h,
-				b_y to biasData_y
-		)))
-		println()
-
+		if(iteration % 10 == 0) {
+			print(g.getOutput(out, mapOf(
+					x to Nd4j.create(floatArrayOf(0.0f, 0.0f))
+			)))
+			print("\t")
+			print(g.getOutput(out, mapOf(
+					x to Nd4j.create(floatArrayOf(1.0f, 0.0f))
+			)))
+			print("\t")
+			print(g.getOutput(out, mapOf(
+					x to Nd4j.create(floatArrayOf(1.0f, 0.0f))
+			)))
+			print("\t")
+			print(g.getOutput(out, mapOf(
+					x to Nd4j.create(floatArrayOf(1.0f, 1.0f))
+			)))
+			println()
+		}
 	}
+}
 
+fun testRNN() {
+	// We'll train an RNN to print out "hello"
+	// '.... . .-.. .-.. --- .-- --- .-. .-.. -..'
+	val graph = Graph()
+	val w_ih = graph.variable(2, 5)
+	val w_hh = graph.variable(5, 5)
+	val w_ho = graph.variable(5, 2)
+
+	val trainingDataSet = Nd4j.create(floatArrayOf(
+		0f, 0f,
+
+		1f, 0f,// H
+		1f, 0f,
+		1f, 0f,
+		1f, 0f,
+
+		0f, 0f,
+
+		1f, 0f, //E
+
+		0f, 0f,
+
+		1f, 0f, //L
+		0f, 1f,
+		1f, 0f,
+		1f, 0f,
+
+		0f, 0f,
+
+		1f, 0f, //L
+		0f, 1f,
+		1f, 0f,
+		1f, 0f,
+
+		0f, 0f,
+
+		0f, 1f, //O
+		0f, 1f,
+		0f, 1f,
+
+		0f, 0f
+	))
+
+	// Unroll the RMM across a few loops.
+	var prevInput = graph.input(1, 2) // . and -
+	for(i in (0..5)) {
+		// Unroll.
+	}
 }
