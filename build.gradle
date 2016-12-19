@@ -40,9 +40,24 @@ dependencies {
 	//compile "golem:golem-backend-mtj:0.7"
 	//compile group: "golem", name:"golem-backend-mtj", version: "0.7"
 	//compile group: "golem", name:"golem-core", version: "0.7"
-	compile "org.nd4j:nd4j-native:0.7.0"
-    compile "org.nd4j:nd4j-native-platform:0.4.0"
+	//compile "org.nd4j:nd4j-native:0.7.1" // In theory, platform should be enough for just the three big ones, Windows, OSX, and Linux.  I've not seen it work, though.
+	compile "org.nd4j:nd4j-native-platform:0.4.0" // This is for ALL the platforms, Windows, OSX, Android, Linux, Arm, x86 native, EVERYTHING.
 	
+}
+
+sourceSets {
+	main.java.srcDir "src/main/kotlin"
+	// main.resources.srcDir "src/main/resources"
+}
+
+jar {
+	manifest {
+		attributes(
+			"Class-Path": configurations.compile.collect { it.getName() }.join(' '),
+			"Main-Class": mainClassName
+		)
+	}
+	from configurations.compile.collect { entry -> zipTree(entry) }	
 }
 
 task wrapper(type: Wrapper) {
