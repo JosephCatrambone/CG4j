@@ -1,13 +1,13 @@
 package com.josephcatrambone.cg4j
 
-import org.nd4j.linalg.api.ndarray.INDArray
+import java.util.*
 
 /**
  * Created by jcatrambone on 12/13/16.
  */
 
 class Tensor(var shape: IntArray, var data: FloatArray) {
-	private lateinit var dimensionOffset: IntArray // Use this to determine the offset of the item in the linear array
+	private var dimensionOffset: IntArray // Use this to determine the offset of the item in the linear array
 
 	init {
 		dimensionOffset = IntArray(size=shape.size)
@@ -18,6 +18,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	}
 
 	companion object {
+		val random = Random()
 		/*
 		@JvmStatic fun newFromData(vararg shape: Int, data: FloatArray) {
 
@@ -25,7 +26,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		*/
 	}
 
-	private fun indexArrayToIndex(vararg index: Int): Int {
+	fun indexArrayToIndex(vararg index: Int): Int {
 		// Flatten an array of items into a singular index.
 		// (w*y) + x
 		// (h*w*z) + (w*y) + x
@@ -34,10 +35,19 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		return index.foldIndexed(0, {index, accumulator, element -> dimensionOffset[index]*element + accumulator})
 	}
 
-	private fun indexToIndexArray(index: Int): IntArray {
+	fun indexToIndexArray(index: Int): IntArray {
+		//return Tensor.indexToCoordinate(this.shape, index)
+
 		// Remap an index into a point array.
 		// b, d, h, w -> index
-		throw NotImplementedError()
+		// Treat the index as a 'count' item and iterate over the indices in order.
+		var quantLeft = index
+		val indexArray: MutableList<Int> = mutableListOf()
+		for(dimensionSize in dimensionOffset) {
+			indexArray.add(quantLeft / dimensionSize)
+			quantLeft %= dimensionSize
+		}
+		return indexArray.toIntArray()
 	}
 
 	operator fun get(vararg index: Int): Float {
@@ -49,40 +59,191 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		data[indexArrayToIndex(*index)] = value
 	}
 
+	fun elementOperation(f: (Float)->Float): Tensor {
+		val t = dup()
+		for(i in (0..data.size-1)) {
+			t.data[i] = f(t.data[i])
+		}
+		return t
+	}
+
+	fun elementOperation(rhs: Tensor, f: (Float, Float)->Float): Tensor {
+		val t = dup()
+		for(i in (0..data.size-1)) {
+			t.data[i] = f(t.data[i], rhs.data[i])
+		}
+		return t
+	}
+
 	fun elementOperation_i(f:(Float)->Float) {
-		for(i in (0..data.size)) {
+		for(i in (0..data.size-1)) {
 			data[i] = f(data[i])
 		}
 	}
 
+	fun elementOperation_i(rhs: Tensor, f:(Float, Float)->Float) {
+		for(i in (0..data.size-1)) {
+			data[i] = f(data[i], rhs.data[i])
+		}
+	}
+
+	// Tensor Contraction
 	fun mmul(rhs: Tensor): Tensor {
 		assert(this.shape[this.shape.size-1] == rhs.shape[0])
 		var out = Tensor.zeros(*(this.shape.sliceArray(0..this.shape.size-2).plus(rhs.shape.sliceArray(1..rhs.shape.size-1))))
+		// We need to 'count up' through all the dimensions except the last for the outer tensor.
+		// We need to 'count up' through all the dimensions except the FIRST for the inner tensor.
+		// We need to count in parallel through the dimensions and accumulate the product for the inner-most dimension.
+		//
+		// Cijmno = for all k, Aijk * Bkmno
+		//
+		if(out.shape.size == 2) { // Standard matrix multiply.
+			for(i in (0..out.shape[0]-1)) {
+				for(j in (0..out.shape[1]-1)) {
+					var accumulator = 0f
+					for(k in (0..this.shape.last()-1)) {
+						accumulator += this[i,k]*rhs[k,j]
+					}
+					out[i,j] = accumulator
+				}
+			}
+		} else if(out.shape.size == 4) {
+			for(i in (0..out.shape[0]-1)) { // -1 because range is inclusive.
+				for(j in (0..out.shape[1]-1)) {
+					for(m in (0..out.shape[2]-1)) {
+						for(n in (0..out.shape[3]-1)) {
+
+							var accumulator = 0f
+							for(k in (0..this.shape.last()-1)) {
+								accumulator += this[i,j,k]*rhs[k,m,n]
+							}
+							out[i,j,m,n] = accumulator
+
+						}
+					}
+				}
+			}
+		} else {
+			throw NotImplementedError("Sorry, tensor product with greater than four dimensions is not yet supported.")
+		}
 
 		//for(leftIndex in (0..))
 		return out
 	}
 
-	fun contract(rhs: Tensor, dimension:Int): Tensor {
-		throw NotImplementedError()
+	/***
+	 * Like slice, but won't produce a tensor with the same dimensions as the parent.
+	 * Instead, will return the subtensor.  I.e. if you have [5, 4, 3, 2], a call to
+	 * getSubtensor(0, 4) will give back a tensor of shape [4, 3, 2] from the tensor at [4, :, :, :],
+	 * getSubtensor(2, 2) will give back a tensor of shape [5, 4, 2] from the tensor at [:, :, 2, :]
+	 */
+	fun getSubtensor(axis: Int, axisIndex: Int): Tensor {
+		// Select all the dimensions EXCEPT the one specified by axis.
+		val out: Tensor = Tensor.zeros(
+			*this.shape.filterIndexed{axisIndex, shapeValue -> axisIndex != axis}.toIntArray()
+		)
+
+		// Go through the values here and copy the items.
+		val maxIndex = out.shape.fold(1, {a, b -> a*b})
+		for(index in (0..maxIndex-1)) {
+			// Map from index to the position in the out object.
+			val outIndexArray = out.indexToIndexArray(index)
+			val inIndexArray = IntArray(size=this.shape.size, init = { i -> if(i==axis) {axisIndex} else {outIndexArray[i]} })
+			out.set(*outIndexArray, value=this.get(*inIndexArray))
+		}
+
+		return out
+	}
+
+	fun setSubtensor(axis: Int, axisIndex: Int, value: Tensor) {
+		// Go through the values here and copy the items.
+		val maxIndex = value.shape.fold(1, {a, b -> a*b})
+		for(index in (0..maxIndex-1)) {
+			// Map from index to the position in the out object.
+			val vIndexArray = value.indexToIndexArray(index)
+			val inIndexArray = IntArray(size=this.shape.size, init = { i -> if(i==axis) {axisIndex} else {vIndexArray[i]} })
+			this.set(*inIndexArray, value=value.get(*vIndexArray))
+		}
 	}
 
 	fun slice(vararg slices: IntRange): Tensor {
 		assert(slices.size == shape.size)
+
+		// Get the size from each dimension axis so we know the new tensor size.
+
 		throw NotImplementedError()
 	}
 
 	fun setSlice(vararg slices: IntRange, value: Tensor) {
+		// TODO:
 		for(index in (0..value.shape.size)) {
 			assert(slices[index].endInclusive - slices[index].start == value.shape[index])
 
 			throw NotImplementedError()
 		}
 	}
+
+	fun dup(): Tensor {
+		return Tensor(this.shape.copyOf(), data.copyOf())
+	}
+
+	fun transpose(): Tensor {
+		if(shape.size != 2) {
+			throw NotImplementedError("Not yet implemented for non-square matrices.")
+		}
+		return Tensor.newFromFun(shape[1], shape[0], initFunction = { index:Int -> this.get(index/this.shape[1], index%this.shape[1]) })
+	}
+
+	override fun toString(): String {
+		val sb = StringBuilder()
+		sb.append("TENSOR[")
+		sb.append(this.shape.joinToString())
+		sb.append("] : [")
+		sb.append(this.data.joinToString())
+		sb.append("]")
+		return sb.toString()
+	}
+
+	//
+	// Algebraic operations.  We don't need to explicityl write the return types, but it helps make _i very clear.
+	//
+	fun abs(): Tensor = elementOperation({a -> Math.abs(a)})
+
+	fun add(rhs: Float): Tensor = elementOperation({a -> a+rhs})
+
+	fun add_i(rhs: Float): Unit = elementOperation_i({a -> a+rhs})
+
+	fun add(rhs: Tensor): Tensor = elementOperation(rhs, {a,b -> a+b})
+
+	fun add_i(rhs: Tensor): Unit = elementOperation_i(rhs, {a,b -> a+b})
+
+	fun mul(c: Float): Tensor = elementOperation({a -> a*c})
+
+	fun mul(rhs: Tensor): Tensor = elementOperation(rhs, {a, b -> a*b})
+
+	fun neg(): Tensor = elementOperation({a -> -a})
+
+	fun neg_i(): Unit = elementOperation_i({a -> -a})
+
+	fun pow(c: Float): Tensor = elementOperation({a -> Math.pow(a.toDouble(), c.toDouble()).toFloat()})
+
+	fun sign(): Tensor = elementOperation({ a -> Math.signum(a) })
+
+	fun sub(rhs: Tensor): Tensor = elementOperation(rhs, {a, b -> a-b})
+
+	fun sub_i(rhs: Tensor): Unit = elementOperation_i(rhs, {a, b -> a-b})
+
+	fun tanh(): Tensor = elementOperation({a -> Math.tanh(a.toDouble()).toFloat()})
+
+	fun tanh_i(): Unit = elementOperation_i({a -> Math.tanh(a.toDouble()).toFloat()})
 }
 
 fun Tensor.Companion.newFromFun(vararg shape: Int, initFunction: (Int)->Float): Tensor {
 	return Tensor(shape, FloatArray(init = {index -> initFunction(index)}, size = shape.reduce { a, b -> a*b }))
+}
+
+fun Tensor.Companion.eye(vararg shape: Int): Tensor {
+	return Tensor.newFromFun(*shape, initFunction = { a -> if(a % shape.last() == a / shape.last()) { 1.0f } else { 0.0f } })
 }
 
 fun Tensor.Companion.zeros(vararg shape: Int): Tensor {
@@ -91,4 +252,26 @@ fun Tensor.Companion.zeros(vararg shape: Int): Tensor {
 
 fun Tensor.Companion.ones(vararg shape: Int): Tensor {
 	return Tensor(shape, FloatArray(size=shape.reduce { a, b -> a*b }, init = { a->1.0f }))
+}
+
+fun Tensor.Companion.random(vararg shape: Int): Tensor {
+	return Tensor.newFromFun(*shape, initFunction = { a -> Tensor.random.nextGaussian().toFloat() })
+}
+
+fun Tensor.Companion.indexToCoordinate(shape:IntArray, index:Int): IntArray {
+	val dimensionOffset = IntArray(size=shape.size)
+	for(index in (0..shape.size-2)) {
+		dimensionOffset[index] = shape.slice(index+1..shape.size-1).reduce { a, b -> a*b }
+	}
+	dimensionOffset[shape.size-1] = 1
+
+	// Treat the index as a 'count' item and iterate over the indices in order.
+	var quantLeft = index
+	val indexArray: MutableList<Int> = mutableListOf()
+	for(dimensionSize in dimensionOffset) {
+		indexArray.add(quantLeft / dimensionSize)
+		quantLeft %= dimensionSize
+	}
+
+	return indexArray.toIntArray()
 }
