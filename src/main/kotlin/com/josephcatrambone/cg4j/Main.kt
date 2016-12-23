@@ -34,7 +34,7 @@ fun gradCheck() {
 	}
 
 	val g = Graph()
-	val x = g.input(1, 9)
+	val x = InputNode(1, 9)
 
 	// Test tanh.
 	//val out = g.tanh(x)
@@ -78,14 +78,15 @@ fun gradCheck() {
 fun linearRegression() {
 	val g = Graph()
 
-	val x = g.input(1, 1)
-	val m = g.input(1, 1)
-	val b = g.input(1, 1)
-	val out = g.add(g.elementMultiply(x, m), b)
+	val x = InputNode(1, 1)
+	val m = InputNode(1, 1)
+	val b = InputNode(1, 1)
+	val out = AddNode(ElementMultiplyNode(x, m), b)
 
-	val y = g.input(1, 1)
-	val error = g.subtract(y, out)
-	val squaredError = g.elementMultiply(error, error)
+	val y = InputNode(1, 1)
+	val error = SubtractNode(y, out)
+	val squaredError = ElementMultiplyNode(error, error)
+	g.add(squaredError)
 
 	val mData = Tensor(intArrayOf(1, 1), floatArrayOf(0.1f))
 	val bData = Tensor(intArrayOf(1, 1), floatArrayOf(0.5f))
@@ -94,7 +95,7 @@ fun linearRegression() {
 	for(i in (0..1000)) {
 		val xData = Tensor(intArrayOf(1, 1), floatArrayOf(random.nextFloat()))
 		val yData = Tensor(intArrayOf(1, 1), floatArrayOf((xData[0, 0]*5)-13))
-		val inputFeed : Map<Int, Tensor> = mapOf(
+		val inputFeed : Map<Node, Tensor> = mapOf(
 			x to xData,
 			y to yData,
 
@@ -115,13 +116,15 @@ fun linearRegression() {
 fun linearRegression2() {
 	val g = Graph()
 
-	val x = g.input(1, 2)
-	val m = g.input(2, 1)
-	val out = g.matrixMultiply(x, m)
+	val x = InputNode(1, 2)
+	val m = InputNode(2, 1)
+	val out = MatrixMultiplyNode(x, m)
 
-	val y = g.input(1, 1)
-	val error = g.subtract(y, out)
-	val squaredError = g.elementMultiply(error, error)
+	val y = InputNode(1, 1)
+	val error = SubtractNode(y, out)
+	val squaredError = ElementMultiplyNode(error, error)
+
+	g.add(squaredError)
 
 	val mData = Tensor(intArrayOf(2, 1), floatArrayOf(0.1f, 0.2f))
 
@@ -129,7 +132,7 @@ fun linearRegression2() {
 	for(i in (0..1000)) {
 		val xData = Tensor(intArrayOf(1, 1), floatArrayOf(random.nextFloat(), 1.0f))
 		val yData = Tensor(intArrayOf(1, 1), floatArrayOf((xData[0]*5)-13))
-		val inputFeed : Map<Int, Tensor> = mapOf(
+		val inputFeed : Map<Node, Tensor> = mapOf(
 				x to xData,
 				y to yData,
 				m to mData
@@ -149,31 +152,34 @@ fun learnXOR() {
 	val ITERATIONS = 10000
 	val BATCH_SIZE = 1
 
-	val g = Graph()
 	// Inputs
-	val x = g.input(1, 2)
-	val y = g.input(1, 1)
+	val x = InputNode(1, 2)
+	val y = InputNode(1, 1)
 	// Variables
-	val w_xh = g.variable(2, 3)
-	val w_hy = g.variable(3, 1)
-	val b_h = g.variable(3, 1)
-	val b_y = g.variable(1, 1)
+	val w_xh = VariableNode(2, 3)
+	val w_hy = VariableNode(3, 1)
+	val b_h = VariableNode(3, 1)
+	val b_y = VariableNode(1, 1)
 	// Structure
-	val hidden_preact = g.matrixMultiply(x, w_xh)
-	val hidden_biased = g.add(hidden_preact, b_h) // TODO: Need broadcast-add
-	val hidden = g.tanh(hidden_biased)
-	val output_preact = g.matrixMultiply(hidden, w_hy)
-	val output_biased = g.add(output_preact, b_y)
-	val out = g.tanh(output_biased)
+	val hidden_preact = MatrixMultiplyNode(x, w_xh)
+	val hidden_biased = AddNode(hidden_preact, b_h) // TODO: Need broadcast-add
+	val hidden = TanhNode(hidden_biased)
+	val output_preact = MatrixMultiplyNode(hidden, w_hy)
+	val output_biased = AddNode(output_preact, b_y)
+	val out = TanhNode(output_biased)
 	// Error calculation
-	val difference = g.subtract(y, out)
-	val squaredError = g.elementMultiply(difference, difference)
+	val difference = SubtractNode(y, out)
+	val squaredError = ElementMultiplyNode(difference, difference)
+
+	// Add everything to the graph.
+	val g = Graph()
+	g.add(squaredError)
 
 	// Allocate data.
-	g.variables[w_xh] = Tensor.random(2, 3).mul(0.1f)
-	g.variables[w_hy] = Tensor.random(3, 1).mul(0.1f)
-	g.variables[b_h] = Tensor.zeros(3, 1)
-	g.variables[b_y] = Tensor.zeros(1, 1)
+	w_xh.value = Tensor.random(2, 3).mul(0.1f)
+	w_hy.value = Tensor.random(3, 1).mul(0.1f)
+	b_h.value = Tensor.zeros(3, 1)
+	b_y.value = Tensor.zeros(1, 1)
 
 	// Iteratively fix.
 	for(iteration in (0..ITERATIONS)) {
@@ -186,16 +192,16 @@ fun learnXOR() {
 		val label = if ((xData[i, 0] > 0.5) xor (xData[i, 1] > 0.5)) { 1.0f } else { 0.0f }
 		yData[i, 0] = label
 		//}
-		val inputMap = mapOf(
+		val inputMap = mapOf<Node,Tensor>(
 				x to xData,
 				y to yData
 		)
 		val fwd = g.forward(squaredError, inputMap)
 		val grad = g.reverse(squaredError, inputMap, fwd)
 
-		g.variables[w_xh]!!.sub_i(grad[w_xh]!!.mul(LEARNING_RATE))
-		g.variables[w_hy]!!.sub_i(grad[w_hy]!!.mul(LEARNING_RATE))
-		g.variables[b_h]!!.sub_i(grad[b_h]!!.mul(LEARNING_RATE))
+		w_xh.value.sub_i(grad[w_xh]!!.mul(LEARNING_RATE))
+		w_hy.value.sub_i(grad[w_hy]!!.mul(LEARNING_RATE))
+		b_h.value.sub_i(grad[b_h]!!.mul(LEARNING_RATE))
 		// Currently, including bias makes everything go screwy.  TODO: Problem in bias init or bias add?
 		//biasData_y.subi(grad[b_y]!!.mul(LEARNING_RATE))
 

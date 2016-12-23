@@ -1,36 +1,22 @@
 package com.josephcatrambone.cg4j
 
 import sun.plugin.dom.exception.InvalidStateException
+import java.util.*
 
-//import org.nd4j.linalg.api.ops.impl.transforms.Tanh
-
+/***
+ * Graph is little more than a node wrangler.
+ * It helps set up the compute and push inputs/outputs, but you can call node forward/adjoint directly if you need to.
+ * It also will handle saving and serializing.
+ */
 class Graph {
-	var buildInstructions = mutableListOf<String>()
-	var shapes = arrayOf<IntArray>()
-	var inputs = arrayOf<IntArray>()
-	var variables = mutableMapOf<Int, Tensor>()
-	var operations = arrayOf< (Array<Tensor>)->Tensor >() // Node operations
-	var adjointOperations = arrayOf< (Array<Tensor>, Tensor)->Array<Tensor> >() // Operation from forward activation + parent adjoint -> child adjoint modifications.
+	var lastId: Int = 0
+	var nodes = ArrayList<Node>() // Could be 'mutableList' in Kotlin, but I want to be sure it's not actually a list.
 
-	fun toText(): String {
-		val sb = StringBuilder()
-		// Add build instructions.
-		buildInstructions.forEach { s -> sb.append(s); sb.append("\n") }
-		// Save the variables.
-		sb.append("variables")
-		variables.forEach { ent -> sb.append(ent.key); sb.append("\n"); sb.append(ent.value.toString()) }
-		return ""
-	}
-
-	fun fromText(net: String) {
-
-	}
-
-	fun getOutput(output: Int, inputSet: Map<Int, Tensor>): Tensor {
+	fun getOutput(output: Node, inputSet: Map<Node, Tensor>): Tensor {
 		return forward(output, inputSet)[output]!!
 	}
 
-	fun forward(output: Int, inputSet: Map<Int, Tensor>, cache: MutableMap<Int, Tensor> = mutableMapOf<Int, Tensor>() ): Map<Int, Tensor> {
+	fun forward(output: Node, inputSet: Map<Node, Tensor>, cache: MutableMap<Node, Tensor> = mutableMapOf<Node, Tensor>() ): Map<Node, Tensor> {
 		// Handle the input-node case implicitly.
 		if(output in inputSet) {
 			cache[output] = inputSet[output]!!
@@ -40,36 +26,36 @@ class Graph {
 		if(output !in cache) {
 			// Nope.  Recursively solve for the inputs.
 			var inputValues: Array<Tensor> = arrayOf()
-			for (i in inputs[output]) {
+			for (i in output.inputs) {
 				forward(i, inputSet, cache) // Should calculate the cache.
 				inputValues = inputValues.plus(cache[i]!!)
 			}
-			val result = operations[output](inputValues)
+			val result = output.forwardOperation(*inputValues)
 			cache[output] = result
 		}
 		return cache
 	}
 
-	fun reverse(output: Int, inputSet: Map<Int, Tensor>, activations: Map<Int, Tensor>, adjointCache: MutableMap<Int, Tensor> = mutableMapOf<Int, Tensor>()): Map<Int, Tensor> {
+	fun reverse(output: Node, inputSet: Map<Node, Tensor>, activations: Map<Node, Tensor>, adjointCache: MutableMap<Node, Tensor> = mutableMapOf<Node, Tensor>()): Map<Node, Tensor> {
 		// If the cache is empty, we want to assign this to all ones.
 		if(adjointCache.isEmpty()) {
-			adjointCache[output] = Tensor.ones(*shapes[output]) // This should probably be a 1x1.
+			adjointCache[output] = Tensor.ones(*output.shape) // This should probably be a 1x1.
 		}
 
 		// Calculate the adjoint values of the inputs to this function, then recurse into them.
 		// First, calculate the adjoint of each child.
 		// Make an arrayList of Tensors from the inputs to this node.
 		val forwardArguments : MutableList<Tensor> = mutableListOf() // Note: can't do `activations.filterKeys { nodeId -> nodeId in inputs[output] }.values.toTypedArray()` because we may get dupes in args.
-		for(nodeId in inputs[output]) {
+		for(nodeId in output.inputs) {
 			forwardArguments.add(activations[nodeId]!!)
 		}
 		val fwd = forwardArguments.toTypedArray()
 
 		// Calculate updates.
-		var adjointUpdates : Array<Tensor> = adjointOperations[output](fwd, adjointCache[output]!!)
+		var adjointUpdates : Array<Tensor> = output.adjointOperation(fwd, adjointCache[output]!!)
 
 		// Apply updates.
-		for((nodeIndex, adjointValue) in inputs[output].zip(adjointUpdates)) {
+		for((nodeIndex, adjointValue) in output.inputs.zip(adjointUpdates)) {
 			if(nodeIndex !in adjointCache) {
 				adjointCache[nodeIndex] = adjointValue.dup()
 			} else {
@@ -78,199 +64,24 @@ class Graph {
 		}
 
 		// Now update all the children with this adjoint value.
-		for(childId in inputs[output]) {
+		for(childId in output.inputs) {
 			reverse(childId, inputSet, activations, adjointCache)
 		}
 
 		return adjointCache
 	}
 
-	fun addNode(instruction: String, shape: IntArray, input: IntArray, operation: (Array<Tensor>)->Tensor, adjoint: (Array<Tensor>, Tensor)->Array<Tensor>): Int {
-		this.buildInstructions.add(instruction)
-		this.shapes = this.shapes.plus(shape)
-		this.inputs = this.inputs.plus(input)
-		this.operations = this.operations.plus(operation)
-		this.adjointOperations = this.adjointOperations.plus(adjoint)
-		return shapes.size-1
-	}
-
-	// And now add the actual node types.
-
-	fun input(vararg shape : Int): Int {
-		return addNode(
-			"input",
-			shape,
-			intArrayOf(),
-			{ x -> throw InvalidStateException("The 'operation' method was called on an input, which means it was unspecified in the input stream.") },
-			{ a, b -> arrayOf() }
-		)
-	}
-
-	fun variable(vararg shape: Int): Int {
-		val variableIndex = shapes.size // Force the shapes to match up with the variable index.
-		variables[variableIndex] = Tensor.zeros(*shape)
-		return addNode(
-			"variable",
-			shape,
-			intArrayOf(),
-			{ x -> this.variables[variableIndex]!! },
-			{ a, b -> arrayOf() }
-		)
-	}
-
-	// NOTE: THESE MAY BE MADE OBSOLETE BY THE BROADCAST OPERATOR
-	fun constantAdd(left: Int, cons: Float): Int {
-		return addNode(
-			"constant",
-			shapes[left],
-			intArrayOf(left),
-			{ x -> x[0].add(cons) },
-			{ forwards, parentAdjoint -> arrayOf(parentAdjoint) }
-		)
-	}
-
-	fun constantMultiply(left: Int, cons: Float): Int {
-		return addNode(
-			"multiplyConstant",
-			shapes[left],
-			intArrayOf(left),
-			{ x -> x[0].mul(cons) },
-			{ forwards, parentAdjoint -> arrayOf(parentAdjoint.mul(cons)) }
-		)
-	}
-	// END
-
-	fun add(left: Int, right: Int): Int {
-		return addNode(
-			"add",
-			shapes[left],
-			intArrayOf(left, right),
-			{ x -> x[0].add(x[1]) },
-			{ forwards, parentAdjoint -> arrayOf(parentAdjoint, parentAdjoint) }
-		)
-	}
-
-	fun subtract(left: Int, right: Int): Int {
-		return addNode(
-			"subtract",
-			shapes[left],
-			intArrayOf(left, right),
-			{ x -> x[0].sub(x[1]) },
-			{ forwards, parentAdjoint ->
-				arrayOf(
-					parentAdjoint,
-					parentAdjoint.neg()
-				)
+	fun add(node: Node): Node {
+		// First, add the inputs to the graph recursively _if_ they're not already present.
+		// This can be an expensive operation, but we only build the graph once, so we're okay.
+		for(n in node.inputs) {
+			if(!nodes.contains(n)) {
+				add(n)
 			}
-		)
-	}
-
-	fun elementMultiply(left: Int, right: Int): Int {
-		return addNode(
-			"elementMultiply",
-			shapes[left],
-			intArrayOf(left, right),
-			{ x -> x[0].mul(x[1]) },
-			{ forwards, parentAdjoint ->
-				arrayOf(
-					forwards[1].mul(parentAdjoint),
-					forwards[0].mul(parentAdjoint)
-				)
-			}
-		)
-	}
-
-	fun matrixMultiply(left: Int, right: Int): Int {
-		return addNode(
-			"matrixMultiply",
-			intArrayOf(shapes[left][0], shapes[right][1]),
-			intArrayOf(left, right),
-			{ x -> x[0].mmul(x[1]) },
-			{ forwards, parentAdjoint ->
-				arrayOf(
-					// Left adjoint. If C=AB, adj(a) = adj(c)*bT
-					parentAdjoint.mmul(forwards[1].transpose()),
-					// Right adjoint.  adj(b) = aT*adj(c)
-					forwards[0].transpose().mmul(parentAdjoint)
-				)
-			}
-		)
-	}
-
-	fun tanh(operand: Int): Int {
-		return addNode(
-			"tanh",
-			shapes[operand].copyOf(),
-			intArrayOf(operand),
-			{ x -> x[0].tanh() },
-		// y := EW(x, op) -> y = tanh(x)
-		// x_adj += EW(y_adj, EW(x, d_op), dot)
-		// f(x) = tanh(x).  df(x) = 1 - tanh(x)^2
-		// x_adj += y_adj * d_op(x)
-			{ forwards, parentAdjoint ->
-				arrayOf(
-					// adjoint[operand][i] += adjoint[node][i]*(1.0f - (tanh(forward[operand][i])*tanh(forward[operand][i])));
-					//parentAdjoint.mul(Nd4j.onesLike(parentAdjoint).sub(forwards[thisId].mul(forwards[thisId])))
-					parentAdjoint.mul(Tensor.ones(*parentAdjoint.shape).sub(forwards[0].tanh().mul(forwards[0].tanh())))
-				)
-			}
-		)
-	}
-
-	fun addWithBroadcast(targetNodeToMatch: Int, operandToBroadcast: Int): Int {
-		return addNode(
-			"addWithBroadcast",
-			shapes[targetNodeToMatch].copyOf(),
-			intArrayOf(targetNodeToMatch, operandToBroadcast),
-			{ throw NotImplementedError() },
-			{ forwards, thisAdjoint ->
-				throw NotImplementedError("Still working on backprop with broadcast.")
-				arrayOf(
-					// TODO: Start here.
-				)
-			}
-		)
-	}
-
-	fun power(base: Int, exp: Float): Int { // x^c is supported.  c^x is not yet supported.
-		return addNode(
-			"power",
-			shapes[base].copyOf(),
-			intArrayOf(base),
-			{ x -> x[0].pow(exp) },
-		// x_adj += EW(y_adj, EW(x, d_op), dot)
-		// d/dx 1/x = d/dx x^-1 = -(x^-2) = -(1/x^2)
-			{ forwards, thisAdjoint ->
-				arrayOf(
-					thisAdjoint.mul(forwards[0].pow(exp-1.0f).mul(exp))
-				)
-			}
-		)
-	}
-
-	fun abs(oper: Int): Int {
-		return addNode(
-			"abs",
-			shapes[oper].copyOf(),
-			intArrayOf(oper),
-			{ x -> x[0].abs() },
-		// x_adj += EW(y_adj, EW(x, d_op), dot)
-			{ forwards, thisAdjoint ->
-				arrayOf(
-					thisAdjoint.mul(forwards[0].sign())
-				)
-			}
-		)
-	}
-
-	fun convolution2D(inputMatrix: Int, convolutionKernel: Int, stride: Int): Int {
-		// Input: Volume of W1 H1 D1
-		// Params: K -> # filters, F -> Spatial extent, S -> Stride, P -> Padding.
-		// Output: W2 = (W1 - F + 2P)/S + 1 || H2 is like W2 || D2 = K
-		throw NotImplementedError()
-	}
-
-	fun deconvolution2D(inputMatrix: Int, deconvolutionKernel: Int, stride: Int): Int {
-		throw NotImplementedError()
+		}
+		node.id = lastId
+		lastId++
+		nodes.add(node)
+		return node
 	}
 }
