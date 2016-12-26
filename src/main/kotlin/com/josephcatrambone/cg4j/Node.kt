@@ -137,8 +137,23 @@ class AbsNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 }
 
+class SimpleConvolutionNode(input:Node, numFilters:Int, stride:Int, spatialExtent:Int) : Node(
+		shape=intArrayOf(),
+		inputs=arrayOf<Node>()
+) {
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		return inputValues[0].abs()
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		return arrayOf(
+				adjoint.mul(forwardValues[0].sign())
+		)
+	}
+}
+
 class ConvolutionNode(input:Node, kernel:Node, stride:Int) : Node(IntArray(size=input.shape.size), arrayOf<Node>(input, kernel)) {
-	// Input: Volume of W1 H1 D1
+	// Input: Volume of B W1 H1 D1
 	// Params: K -> # filters, F -> Spatial extent, S -> Stride, P -> Padding.
 	// Output: W2 = (W1 - F + 2P)/S + 1 || H2 is like W2 || D2 = K
 	init {

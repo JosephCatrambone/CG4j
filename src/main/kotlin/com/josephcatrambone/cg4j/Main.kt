@@ -3,82 +3,10 @@ package com.josephcatrambone.cg4j
 import java.util.*
 
 fun main(args : Array<String>) {
-	//var a: INDArray = Nd4j.create(floatArrayOf(1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f), intArrayOf(2, 3))
-	//println("Hello world: $a");
-
-	var r = Tensor.ones(3, 5)
-	var s = r.transpose()
-
-	var t = Tensor.ones(6, 4, 5)
-	t[3, 0, 0] = 0.0f
-	t[3, 1, 1] = 1.0f
-	t[3, 2, 2] = 2.0f
-	var u = Tensor.ones(5, 8, 10)
-	var v = t.mmul(u)
-	println(v.shape)
-
-	println(t.slice((2..4), (0..3), (0..3)))
-	t.setSlice((0..3), (0..2), (0..5), value=Tensor.zeros(4, 3, 6))
-	println(t)
-
-	var i = Tensor.eye(5, 5)
-	var j = Tensor.newFromFun(5, 5, initFunction={ x -> x.toFloat() })
-	var k = i.mmul(j)
-
-	gradCheck()
 	//linearRegression()
 	//linearRegression2()
 	//testRNN()
 	learnXOR()
-}
-
-fun gradCheck() {
-	fun numericalGradient(f:(Float)->Float, x:Float, h:Float) : Float {
-		return (f(x+h) - f(x-h))/(2.0f*h)
-	}
-
-	val g = Graph()
-	val x = InputNode(1, 9)
-
-	// Test tanh.
-	//val out = g.tanh(x)
-	//val f : (Float)->Float = { x -> Math.tanh(x.toDouble()).toFloat() };
-	// Test x^2
-	//val out = g.elementMultiply(x, x)
-	//val f : (Float)->Float = { x -> x*x };
-	// Test x+x
-	//val out = g.add(x, x)
-	//val f : (Float)->Float = { x -> x+x };
-	// Test x-x
-	//val out = g.subtract(x, x)
-	//val f : (Float)->Float = {x -> x-x } // Basically zero.  d/dx x wrt x = 1.  d/dx -x wrt x = -1.  1 + -1 = 0.
-	// Test 1/x
-	//val out = g.power(x, -1f)
-	//val f : (Float)->Float = {x -> Math.pow(x.toDouble(), -1.0).toFloat() }
-	// Test something else.
-	val out = ConstantMultiplyNode(x, 10f)
-	val f : (Float)->Float = {x -> x*10f}
-
-	g.add(out)
-
-	val dx = 1.0e-4f;
-	val xData = Tensor(shape=intArrayOf(1, 9), data=floatArrayOf(-10f, -5f, -2f, -1f, 0.0f, +1f, 2f, 5f, 10f))
-	val inputFeed = mapOf<Node, Tensor>(x to xData)
-	val fwd = g.forward(out, inputFeed)
-	val exactDerivative = g.reverse(out, inputFeed, fwd)[x]!!
-	val numericalDerivative = floatArrayOf(
-		numericalGradient(f, -10f, dx),
-		numericalGradient(f, -5f, dx),
-		numericalGradient(f, -2f, dx),
-		numericalGradient(f, -1f, dx),
-		numericalGradient(f, 0f, dx),
-		numericalGradient(f, 1f, dx),
-		numericalGradient(f, 2f, dx),
-		numericalGradient(f, 5f, dx),
-		numericalGradient(f, 10f, dx)
-	)
-	println("Exact: $exactDerivative")
-	println("Approx: ${numericalDerivative.joinToString()}")
 }
 
 fun linearRegression() {
