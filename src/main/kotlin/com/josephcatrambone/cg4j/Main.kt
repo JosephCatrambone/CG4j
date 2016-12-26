@@ -17,6 +17,10 @@ fun main(args : Array<String>) {
 	var v = t.mmul(u)
 	println(v.shape)
 
+	println(t.slice((2..4), (0..3), (0..3)))
+	t.setSlice((0..3), (0..2), (0..5), value=Tensor.zeros(4, 3, 6))
+	println(t)
+
 	var i = Tensor.eye(5, 5)
 	var j = Tensor.newFromFun(5, 5, initFunction={ x -> x.toFloat() })
 	var k = i.mmul(j)

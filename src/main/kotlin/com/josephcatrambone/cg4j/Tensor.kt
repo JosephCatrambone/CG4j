@@ -174,7 +174,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		val numOutputFloats = out.shape.reduce {a, b -> a*b}
 
 		// Iterate through each of the possible indices, building them up from the outside.
-		for(i in (0..numOutputFloats)) {
+		for(i in (0..numOutputFloats-1)) {
 			// Get the position of i in the out tensor.
 			val outTensorPosition = out.indexToIndexArray(i)
 			val inTensorPosition = outTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
@@ -191,11 +191,11 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		val numFloats = value.shape.reduce {a, b -> a*b}
 
 		// Iterate through each of the possible indices, building them up from the outside.
-		for(i in (0..numFloats)) {
+		for(i in (0..numFloats-1)) {
 			// Get the position of i in the out tensor.
 			val thatTensorPosition = value.indexToIndexArray(i)
 			val thisTensorPosition = thatTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
-			this.set(*thisTensorPosition, value=this.get(*thatTensorPosition))
+			this.set(*thisTensorPosition, value=value.get(*thatTensorPosition))
 		}
 	}
 

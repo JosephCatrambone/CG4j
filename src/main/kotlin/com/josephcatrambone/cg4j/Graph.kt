@@ -9,7 +9,6 @@ import java.util.*
  * It also will handle saving and serializing.
  */
 class Graph {
-	var lastId: Int = 0
 	var nodes = ArrayList<Node>() // Could be 'mutableList' in Kotlin, but I want to be sure it's not actually a list.
 
 	fun getOutput(output: Node, inputSet: Map<Node, Tensor>): Tensor {
@@ -79,8 +78,6 @@ class Graph {
 				add(n)
 			}
 		}
-		node.id = lastId
-		lastId++
 		nodes.add(node)
 		return node
 	}
