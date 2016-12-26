@@ -23,7 +23,7 @@ class TensorTestBasics : StringSpec() {
 		"Tensor random index check" {
 			val t = Tensor.ones(100, 100)
 			forAll(Gen.int(), Gen.int(), { a: Int, b: Int ->
-				t[a%100g, b%100] == 1.0f
+				t[a%100, b%100] == 1.0f
 			})
 		}
 
