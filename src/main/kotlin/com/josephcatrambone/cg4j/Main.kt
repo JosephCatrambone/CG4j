@@ -52,12 +52,14 @@ fun gradCheck() {
 	//val out = g.power(x, -1f)
 	//val f : (Float)->Float = {x -> Math.pow(x.toDouble(), -1.0).toFloat() }
 	// Test something else.
-	val out = g.constantMultiply(x, 10f)
+	val out = ConstantMultiplyNode(x, 10f)
 	val f : (Float)->Float = {x -> x*10f}
+
+	g.add(out)
 
 	val dx = 1.0e-4f;
 	val xData = Tensor(shape=intArrayOf(1, 9), data=floatArrayOf(-10f, -5f, -2f, -1f, 0.0f, +1f, 2f, 5f, 10f))
-	val inputFeed = mapOf(x to xData)
+	val inputFeed = mapOf<Node, Tensor>(x to xData)
 	val fwd = g.forward(out, inputFeed)
 	val exactDerivative = g.reverse(out, inputFeed, fwd)[x]!!
 	val numericalDerivative = floatArrayOf(

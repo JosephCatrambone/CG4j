@@ -5,7 +5,6 @@ package com.josephcatrambone.cg4j
  */
 abstract class Node(val shape:IntArray, val inputs:Array<Node>) {
 	var name:String = ""
-	var id=-1
 	abstract fun forwardOperation(vararg inputValues: Tensor): Tensor
 	abstract fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor>
 }
@@ -59,6 +58,16 @@ class SubtractNode(lhs:Node, rhs:Node) : Node(lhs.shape, arrayOf<Node>(lhs, rhs)
 
 	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
 		return arrayOf(adjoint, adjoint.neg())
+	}
+}
+
+class ConstantMultiplyNode(lhs:Node, val c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		return inputValues[0].mul(c)
+	}
+
+	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+		return arrayOf(adjoint.mul(c))
 	}
 }
 
@@ -128,52 +137,23 @@ class AbsNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 }
 
-// And now add the actual node types.
-
-// NOTE: THESE MAY BE MADE OBSOLETE BY THE BROADCAST OPERATOR
-fun constantAdd(left: Int, cons: Float): Int {
-	return addNode(
-			"constant",
-			shapes[left],
-			intArrayOf(left),
-			{ x -> x[0].add(cons) },
-			{ forwards, parentAdjoint -> arrayOf(parentAdjoint) }
-	)
-}
-
-fun constantMultiply(left: Int, cons: Float): Int {
-	return addNode(
-			"multiplyConstant",
-			shapes[left],
-			intArrayOf(left),
-			{ x -> x[0].mul(cons) },
-			{ forwards, parentAdjoint -> arrayOf(parentAdjoint.mul(cons)) }
-	)
-}
-// END
-
-fun addWithBroadcast(targetNodeToMatch: Int, operandToBroadcast: Int): Int {
-	return addNode(
-			"addWithBroadcast",
-			shapes[targetNodeToMatch].copyOf(),
-			intArrayOf(targetNodeToMatch, operandToBroadcast),
-			{ throw NotImplementedError() },
-			{ forwards, thisAdjoint ->
-				throw NotImplementedError("Still working on backprop with broadcast.")
-				arrayOf(
-						// TODO: Start here.
-				)
-			}
-	)
-}
-
-fun convolution2D(inputMatrix: Int, convolutionKernel: Int, stride: Int): Int {
+class ConvolutionNode(input:Node, kernel:Node, stride:Int) : Node(IntArray(size=input.shape.size), arrayOf<Node>(input, kernel)) {
 	// Input: Volume of W1 H1 D1
 	// Params: K -> # filters, F -> Spatial extent, S -> Stride, P -> Padding.
 	// Output: W2 = (W1 - F + 2P)/S + 1 || H2 is like W2 || D2 = K
-	throw NotImplementedError()
-}
+	init {
+		// Assume we have an in put in R4 and a kernel in R4 that matches.
+		val b1 = input.shape[0]
 
-fun deconvolution2D(inputMatrix: Int, deconvolutionKernel: Int, stride: Int): Int {
-	throw NotImplementedError()
+	}
+
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		return inputValues[0].abs()
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		return arrayOf(
+				adjoint.mul(forwardValues[0].sign())
+		)
+	}
 }

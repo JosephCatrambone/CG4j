@@ -169,17 +169,33 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	fun slice(vararg slices: IntRange): Tensor {
 		assert(slices.size == shape.size)
 
-		// Get the size from each dimension axis so we know the new tensor size.
+		val out = Tensor.zeros(*slices.map { x -> x.endInclusive-x.start }.toIntArray())
+		val offsets = slices.map{ x -> x.start }.toIntArray()
+		val numOutputFloats = out.shape.reduce {a, b -> a*b}
 
-		throw NotImplementedError()
+		// Iterate through each of the possible indices, building them up from the outside.
+		for(i in (0..numOutputFloats)) {
+			// Get the position of i in the out tensor.
+			val outTensorPosition = out.indexToIndexArray(i)
+			val inTensorPosition = outTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
+			out.set(*outTensorPosition, value=this.get(*inTensorPosition))
+		}
+
+		return out
 	}
 
 	fun setSlice(vararg slices: IntRange, value: Tensor) {
-		// TODO:
-		for(index in (0..value.shape.size)) {
-			assert(slices[index].endInclusive - slices[index].start == value.shape[index])
+		assert(slices.size == shape.size)
 
-			throw NotImplementedError()
+		val offsets = slices.map{ x -> x.start }.toIntArray()
+		val numFloats = value.shape.reduce {a, b -> a*b}
+
+		// Iterate through each of the possible indices, building them up from the outside.
+		for(i in (0..numFloats)) {
+			// Get the position of i in the out tensor.
+			val thatTensorPosition = value.indexToIndexArray(i)
+			val thisTensorPosition = thatTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
+			this.set(*thisTensorPosition, value=this.get(*thatTensorPosition))
 		}
 	}
 
