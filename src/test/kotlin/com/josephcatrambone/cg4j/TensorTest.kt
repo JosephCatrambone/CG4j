@@ -22,8 +22,9 @@ class TensorTestBasics : StringSpec() {
 
 		"Tensor random index check" {
 			val t = Tensor.ones(100, 100)
-			forAll(Gen.int(), Gen.int(), { a: Int, b: Int ->
-				t[a%100, b%100] == 1.0f
+			//forAll(Gen.int(), Gen.int(), { a: Int, b: Int ->
+			forAll(Gen.choose(0, 100), Gen.choose(0, 100), { a: Int, b: Int ->
+				t[a, b] == 1.0f
 			})
 		}
 

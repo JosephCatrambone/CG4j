@@ -1,6 +1,7 @@
 package com.josephcatrambone.cg4j
 
 import sun.plugin.dom.exception.InvalidStateException
+import java.io.File
 import java.util.*
 
 /***
@@ -9,6 +10,7 @@ import java.util.*
  * It also will handle saving and serializing.
  */
 class Graph {
+	var lastId: Int = 0
 	var nodes = ArrayList<Node>() // Could be 'mutableList' in Kotlin, but I want to be sure it's not actually a list.
 
 	fun getOutput(output: Node, inputSet: Map<Node, Tensor>): Tensor {
@@ -78,7 +80,32 @@ class Graph {
 				add(n)
 			}
 		}
+		node.id = lastId
+		lastId++
 		nodes.add(node)
 		return node
+	}
+
+	fun save(f: File) {
+		val fout = f.bufferedWriter()
+		try {
+			nodes.forEach { n -> fout.write(n.toString()); fout.newLine() }
+		} finally{
+			fout.close()
+		}
+	}
+
+	fun load(f: File) {
+		loadFromString(f.readText())
+	}
+
+	fun loadFromString(text: String) {
+		val lines = text.split('\n')
+		val newNodes = lines.forEach { line ->
+			val className = line.substringBefore('|')
+			val args = line.substringAfter('|')
+			val n = Class.forName(className).getConstructor().newInstance() as Node
+			n.fromString(this, args)
+		}
 	}
 }

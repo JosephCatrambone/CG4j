@@ -3,10 +3,48 @@ package com.josephcatrambone.cg4j
 /**
  * Created by jcatrambone on 12/22/16.
  */
-abstract class Node(val shape:IntArray, val inputs:Array<Node>) {
+abstract class Node(var shape:IntArray, var inputs:Array<Node>) {
+	var id: Int = -1 // When we serialize, we write these IDs instead of recursively serualizing objects.
 	var name:String = ""
 	abstract fun forwardOperation(vararg inputValues: Tensor): Tensor
 	abstract fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor>
+
+	override fun toString(): String {
+		val sb = StringBuilder()
+		// Class Name.  This will get stripped off by the parent class.
+		sb.append(this.javaClass.canonicalName)
+		sb.append('|')
+		// ID
+		sb.append(this.id)
+		sb.append('|')
+		// Name
+		sb.append(this.name)
+		sb.append('|')
+		// Shape
+		sb.append(this.shape.joinToString(separator = ","))
+		sb.append('|')
+		// Inputs
+		for(n in this.inputs) {
+			sb.append(n.id)
+			sb.append(',')
+		}
+		sb.append('|')
+		sb.append(extrasToString('|'))
+		return sb.toString()
+	}
+
+	fun fromString(g: Graph, line:String) { // Need Graph so we can do the 'Get Node' thing.
+		val tokens = line.splitToSequence('|').iterator()
+		this.id = tokens.next().toInt()
+		this.name = tokens.next()
+		this.shape = tokens.next().split(',').map{ s -> s.toInt() }.toIntArray()
+		this.inputs = tokens.next().split(',').map{ s -> g.nodes[s.toInt()] }.toTypedArray<Node>()
+
+		extrasFromString(tokens)
+	}
+
+	fun extrasToString(delimiter:Char='|'): String { return "" }
+	fun extrasFromString(iter:Iterator<String>) {}
 }
 
 class InputNode(vararg shape:Int) : Node(shape, inputs=arrayOf<Node>()) {

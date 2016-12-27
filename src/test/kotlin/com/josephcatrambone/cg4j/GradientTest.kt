@@ -17,8 +17,19 @@ class GradientTest : StringSpec() {
 		}
 
 		"Gradient random check" {
-			forAll(Gen.int(), Gen.int(), { a: Int, b: Int ->
-				a+b == a+b
+			forAll(Gen.float(), { a: Float ->
+				val g = Graph()
+				val x = InputNode(1, 1)
+				val out = TanhNode(x)
+				g.add(out)
+				val dx = 1.0e-5f
+				val inputTensor = Tensor(intArrayOf(1, 1), data=floatArrayOf(a))
+				val fwd = g.forward(out, mapOf(x to inputTensor))
+				val exactDerivative = g.reverse(out, mapOf(x to inputTensor), fwd)[x]!!
+				val numericalDerivative = floatArrayOf(numericalGradient({x -> Math.tanh(x.toDouble()).toFloat()}, a, dx))
+				println("Checking gradient: ${exactDerivative[0]} == ${numericalDerivative[0]}?")
+
+				Math.abs(exactDerivative[0]-numericalDerivative[0]) < 1.0f
 			})
 		}
 	}
