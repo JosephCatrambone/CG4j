@@ -169,7 +169,8 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	fun slice(vararg slices: IntRange): Tensor {
 		assert(slices.size == shape.size)
 
-		val out = Tensor.zeros(*slices.map { x -> x.endInclusive-x.start }.toIntArray())
+		// Off by one.  The slices are inclusive, but we have to allocate +1 to make them match.
+		val out = Tensor.zeros(*slices.map { x -> 1+x.last-x.start }.toIntArray())
 		val offsets = slices.map{ x -> x.start }.toIntArray()
 		val numOutputFloats = out.shape.reduce {a, b -> a*b}
 
@@ -178,7 +179,8 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 			// Get the position of i in the out tensor.
 			val outTensorPosition = out.indexToIndexArray(i)
 			val inTensorPosition = outTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
-			out.set(*outTensorPosition, value=this.get(*inTensorPosition))
+			val v = this.get(*inTensorPosition)
+			out.set(*outTensorPosition, value=v)
 		}
 
 		return out
