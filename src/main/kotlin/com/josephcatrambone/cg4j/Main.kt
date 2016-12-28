@@ -6,8 +6,8 @@ import java.util.*
 fun main(args : Array<String>) {
 	//linearRegression()
 	//linearRegression2()
-	//testRNN()
-	learnXOR()
+	testRNN()
+	//learnXOR()
 }
 
 fun linearRegression() {
@@ -80,6 +80,23 @@ fun linearRegression2() {
 	}
 
 	println("$mData")
+}
+
+fun testRNN() {
+	var x = Tensor(intArrayOf(6, 3), floatArrayOf(
+		0f, 0f, 0f,
+		0f, 0f, 1f,
+		0f, 0f, 0f,
+		0f, 1f, 0f,
+		0f, 0f, 0f,
+		1f, 0f, 0f
+	))
+	var y = Tensor.zeros(6, 3)
+	y.setSlice((0..4), (0..2), value=x.slice((1..5), (0..2)))
+
+	val rnn = RNN(3, 4)
+	rnn.fit(x, y, 0.001f)
+	println()
 }
 
 fun learnXOR() {
@@ -161,8 +178,4 @@ fun learnXOR() {
 	}
 
 	g.save(File("outputXOR.txt"))
-
-	var g2 = Graph()
-	g2.load(File("outputXOR.txt"))
-
 }

@@ -148,7 +148,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		for(index in (0..maxIndex-1)) {
 			// Map from index to the position in the out object.
 			val outIndexArray = out.indexToIndexArray(index)
-			val inIndexArray = IntArray(size=this.shape.size, init = { i -> if(i==axis) {axisIndex} else {outIndexArray[i]} })
+			val inIndexArray = IntArray(size=this.shape.size, init = { i -> if(i<axis) {outIndexArray[i]} else if (i == axis) { axisIndex } else {outIndexArray[i-1]} })
 			out.set(*outIndexArray, value=this.get(*inIndexArray))
 		}
 
@@ -179,8 +179,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 			// Get the position of i in the out tensor.
 			val outTensorPosition = out.indexToIndexArray(i)
 			val inTensorPosition = outTensorPosition.zip(offsets).map { p -> p.first+p.second }.toIntArray()
-			val v = this.get(*inTensorPosition)
-			out.set(*outTensorPosition, value=v)
+			out.set(*outTensorPosition, value=this.get(*inTensorPosition))
 		}
 
 		return out
