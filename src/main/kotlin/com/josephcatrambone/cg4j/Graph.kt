@@ -1,6 +1,5 @@
 package com.josephcatrambone.cg4j
 
-import sun.plugin.dom.exception.InvalidStateException
 import java.io.File
 import java.util.*
 
@@ -89,23 +88,74 @@ class Graph {
 	fun save(f: File) {
 		val fout = f.bufferedWriter()
 		try {
-			nodes.forEach { n -> fout.write(n.toString()); fout.newLine() }
+			nodes.forEach { n ->
+				//fout.write(n.javaClass.canonicalName) //-> com.josephcatrambone.cg4j.something
+				fout.write(n.javaClass.simpleName) //->something
+				fout.write("|")
+				fout.write(n.id.toString())
+				fout.write("|")
+				fout.write(n.name)
+				fout.write("|")
+				fout.write(n.inputs.map { input -> input.id }.joinToString(separator=","))
+				fout.write("|")
+				fout.write(n.shape.joinToString(separator=","))
+				fout.write("|")
+				fout.write(n.extraDataToString(separator="|"))
+				fout.newLine()
+			}
 		} finally{
 			fout.close()
 		}
 	}
 
 	fun load(f: File) {
-		loadFromString(f.readText())
-	}
-
-	fun loadFromString(text: String) {
-		val lines = text.split('\n')
-		val newNodes = lines.forEach { line ->
-			val className = line.substringBefore('|')
-			val args = line.substringAfter('|')
-			val n = Class.forName(className).getConstructor().newInstance() as Node
-			n.fromString(this, args)
+		val fout = f.bufferedReader()
+		try {
+			nodes = ArrayList()
+			fout.forEachLine {
+				val tokens = it.split("|").iterator()
+				//n.javaClass.canonicalName)
+				var className = tokens.next()
+				// If we used canonical names, we could do this: var n : Node = Class.forName(className).getConstructor().newInstance() as Node
+				//n.id.toString())
+				val id =  tokens.next().toInt()
+				//fout.write(n.name)
+				val name = tokens.next()
+				//fout.write(n.inputs.map { input -> input.id }.joinToString(separator=","))
+				val inputToken = tokens.next()
+				var inputs = arrayOf<Node>()
+				if(inputToken != "") {
+					val inputList = inputToken.split(",")
+					inputs = inputList.map { inId -> this.nodes[inId.toInt()] }.toTypedArray()
+				}
+				//fout.write(n.shape.joinToString(separator=","))
+				val shapeList = tokens.next().split(",")
+				val shape = shapeList.map{dimensionValue -> dimensionValue.toInt()}.toIntArray()
+				//fout.write(n.extraDataToString())
+				val n = when(className) {
+					"InputNode" -> InputNode(*shape)
+					"VariableNode" -> InputNode(*shape)
+					"AddConstantNode" -> AddConstantNode(inputs[0], -1f)
+					"AddNode" -> AddNode(inputs[0], inputs[1])
+					"SubtractNode" -> SubtractNode(inputs[0], inputs[1])
+					"ConstantMultiplyNode" -> ConstantMultiplyNode(inputs[0], -1f)
+					"ElementMultiplyNode" -> ElementMultiplyNode(inputs[0], inputs[1])
+					"MatrixMultiplyNode" -> MatrixMultiplyNode(inputs[0], inputs[1])
+					"TanhNode" -> TanhNode(inputs[0])
+					"PowerNode" -> PowerNode(inputs[0], -1f)
+					"AbsNode" -> AbsNode(inputs[0])
+					else -> throw RuntimeException("Unrecognized class type to deserialize: $className")
+				}
+				n.id = id
+				n.name = name
+				n.inputs = inputs
+				n.shape = shape
+				n.extraDataFromStringIterator(tokens)
+				nodes.add(n)
+				assert(nodes.size == n.id)
+			}
+		} finally{
+			fout.close()
 		}
 	}
 }

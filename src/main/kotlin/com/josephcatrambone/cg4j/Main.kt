@@ -161,4 +161,8 @@ fun learnXOR() {
 	}
 
 	g.save(File("outputXOR.txt"))
+
+	var g2 = Graph()
+	g2.load(File("outputXOR.txt"))
+
 }

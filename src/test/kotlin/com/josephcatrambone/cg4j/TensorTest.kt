@@ -2,6 +2,7 @@ package com.josephcatrambone.cg4j
 
 import io.kotlintest.properties.Gen
 import io.kotlintest.specs.StringSpec
+import java.util.*
 
 /**
  * Created by josephcatrambone on 12/26/16.
@@ -47,6 +48,16 @@ class TensorTestBasics : StringSpec() {
 			var i = Tensor.eye(5, 5)
 			var j = Tensor.newFromFun(5, 5, initFunction={ x -> x.toFloat() })
 			var k = i.mmul(j)
+		}
+
+		"Tensor should be able to serialize to and from string." {
+			val random = Random()
+			val t1 = Tensor.newFromFun(5, 4, 3, 2, initFunction = { i -> random.nextFloat() })
+			val s = t1.toString()
+			val t2 = Tensor.fromString(s)
+
+			Arrays.deepEquals(t1.shape.toTypedArray(), t2.shape.toTypedArray()) shouldBe true
+			Arrays.deepEquals(t1.data.toTypedArray(), t2.data.toTypedArray()) shouldBe true
 		}
 	}
 }

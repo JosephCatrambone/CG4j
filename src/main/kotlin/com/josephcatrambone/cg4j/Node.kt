@@ -2,52 +2,34 @@ package com.josephcatrambone.cg4j
 
 /**
  * Created by jcatrambone on 12/22/16.
+ * Some quick notes about approach:
+ * If we have input as an array of IDs (where each ID refers to a graph node), then...
+ *  + We can serialize very easily.
+ *  - We have to pass a reference to the graph when we create the nodes, otherwise they can't figure out size.
+ * If we have inputs as an array of Nodes, then...
+ *  + We can easily determine the size of the nodes.
+ *  + When we do the compute w/ memoization, we automatically prune unused nodes.
+ *  - Hard to serialize and unserialize.
+ * If we have blank constructors, it's easier for us to just instance a new node of whatever class and fill it in later.
+ * This functionality is delegated to the graph, since it's already thin and doesn't have much responsibility.
+ * It means also we can do a better job handling the deserialization from node IDs.
  */
-abstract class Node(var shape:IntArray, var inputs:Array<Node>) {
-	var id: Int = -1 // When we serialize, we write these IDs instead of recursively serualizing objects.
+abstract class Node(var shape:IntArray=intArrayOf(), var inputs:Array<Node> =arrayOf<Node>()) {
+	var id: Int = -1 // When we serialize, we write these IDs instead of recursively serializing objects.
 	var name:String = ""
 	abstract fun forwardOperation(vararg inputValues: Tensor): Tensor
 	abstract fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor>
 
-	override fun toString(): String {
-		val sb = StringBuilder()
-		// Class Name.  This will get stripped off by the parent class.
-		sb.append(this.javaClass.canonicalName)
-		sb.append('|')
-		// ID
-		sb.append(this.id)
-		sb.append('|')
-		// Name
-		sb.append(this.name)
-		sb.append('|')
-		// Shape
-		sb.append(this.shape.joinToString(separator = ","))
-		sb.append('|')
-		// Inputs
-		for(n in this.inputs) {
-			sb.append(n.id)
-			sb.append(',')
-		}
-		sb.append('|')
-		sb.append(extrasToString('|'))
-		return sb.toString()
-	}
-
-	fun fromString(g: Graph, line:String) { // Need Graph so we can do the 'Get Node' thing.
-		val tokens = line.splitToSequence('|').iterator()
-		this.id = tokens.next().toInt()
-		this.name = tokens.next()
-		this.shape = tokens.next().split(',').map{ s -> s.toInt() }.toIntArray()
-		this.inputs = tokens.next().split(',').map{ s -> g.nodes[s.toInt()] }.toTypedArray<Node>()
-
-		extrasFromString(tokens)
-	}
-
-	fun extrasToString(delimiter:Char='|'): String { return "" }
-	fun extrasFromString(iter:Iterator<String>) {}
+	// These are used for serialization.
+	// By default, the graph will populate the id, name, shape, and inputs.
+	// If a node needs extra data, like a stored value, that has to be put in the extra data.
+	open fun extraDataToString(separator:String="|"): String { return "" }
+	open fun extraDataFromStringIterator(it:Iterator<String>) {}
 }
 
-class InputNode(vararg shape:Int) : Node(shape, inputs=arrayOf<Node>()) {
+class InputNode(vararg shape:Int) : Node(shape) {
+	//constructor() : this(-1) {} // Allow empty constructor when reloading from disk.  We'll set these later.
+
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		throw RuntimeException("You should never see this.  The graph should be checking the inputs before this gets called.")
 	}
@@ -57,7 +39,7 @@ class InputNode(vararg shape:Int) : Node(shape, inputs=arrayOf<Node>()) {
 	}
 }
 
-class VariableNode(vararg shape:Int) : Node(shape, inputs=arrayOf<Node>()) {
+class VariableNode(vararg shape:Int) : Node(shape) {
 	var value: Tensor = Tensor.zeros(*shape)
 
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
@@ -67,15 +49,34 @@ class VariableNode(vararg shape:Int) : Node(shape, inputs=arrayOf<Node>()) {
 	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
 		return arrayOf()
 	}
+
+	override fun extraDataToString(separator:String):String {
+		return value.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		//super.extraDataFromStringIterator(it)
+		this.value = Tensor.fromString(it.next())
+	}
+
 }
 
-class AddConstantNode(lhs:Node, val c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
+class AddConstantNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0].add(c)
 	}
 
 	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
 		return arrayOf(adjoint)
+	}
+
+	override fun extraDataToString(separator:String):String {
+		return c.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		//super.extraDataFromStringIterator(it)
+		this.c = it.next().toFloat()
 	}
 }
 
@@ -99,13 +100,21 @@ class SubtractNode(lhs:Node, rhs:Node) : Node(lhs.shape, arrayOf<Node>(lhs, rhs)
 	}
 }
 
-class ConstantMultiplyNode(lhs:Node, val c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
+class ConstantMultiplyNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0].mul(c)
 	}
 
 	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
 		return arrayOf(adjoint.mul(c))
+	}
+
+	override fun extraDataToString(separator:String):String {
+		return c.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		this.c = it.next().toFloat()
 	}
 }
 
@@ -151,7 +160,7 @@ class TanhNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
 	}
 }
 
-class PowerNode(base:Node, val exponent: Float) : Node(shape=base.shape, inputs=arrayOf<Node>(base)) {
+class PowerNode(base:Node, var exponent: Float) : Node(shape=base.shape, inputs=arrayOf<Node>(base)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0].pow(exponent)
 	}
@@ -160,6 +169,15 @@ class PowerNode(base:Node, val exponent: Float) : Node(shape=base.shape, inputs=
 		return arrayOf(
 			adjoint.mul(forwardValues[0].pow(exponent-1.0f).mul(exponent))
 		)
+	}
+
+	override fun extraDataToString(separator:String):String {
+		return exponent.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		//super.extraDataFromStringIterator(it)
+		this.exponent = it.next().toFloat()
 	}
 }
 

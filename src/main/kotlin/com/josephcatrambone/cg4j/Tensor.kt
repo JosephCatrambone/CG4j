@@ -211,6 +211,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	}
 
 	override fun toString(): String {
+		// Make sure this stays in sync with fromString.
 		val sb = StringBuilder()
 		sb.append("TENSOR[")
 		sb.append(this.shape.joinToString())
@@ -252,6 +253,15 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	fun tanh(): Tensor = elementOperation({a -> Math.tanh(a.toDouble()).toFloat()})
 
 	fun tanh_i(): Unit = elementOperation_i({a -> Math.tanh(a.toDouble()).toFloat()})
+}
+
+fun Tensor.Companion.fromString(s:String): Tensor {
+	var shapeString = s.substringAfter("TENSOR[").substringBefore("] : [")
+	var dataString = s.substringAfter("] : [").substringBeforeLast("]")
+
+	var t = Tensor(shapeString.split(", ").map { x -> x.toInt() }.toIntArray(), dataString.split(", ").map { x -> x.toFloat() }.toFloatArray())
+
+	return t
 }
 
 fun Tensor.Companion.newFromFun(vararg shape: Int, initFunction: (Int)->Float): Tensor {
