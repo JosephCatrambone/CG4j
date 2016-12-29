@@ -97,34 +97,38 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		//
 		// Cijmno = for all k, Aijk * Bkmno
 		//
-		if(out.shape.size == 2) { // Standard matrix multiply.
-			for(i in (0..out.shape[0]-1)) {
-				for(j in (0..out.shape[1]-1)) {
-					var accumulator = 0f
-					for(k in (0..this.shape.last()-1)) {
-						accumulator += this[i,k]*rhs[k,j]
-					}
-					out[i,j] = accumulator
+
+		// Build the dimension iterator for the left hand side, save the last dimension.
+		/*
+		val lhsDimensionOffset = this.dimensionOffset.slice(0..this.dimensionOffset.size-2)
+		val lhsDimensionSize = this.shape.reduce({a, b -> a*b}) / this.shape.last() // [A, B, C, D] -> A*B*C
+		val rhsDimensionOffset = rhs.dimensionOffset.slice(1..rhs.dimensionOffset.size-1)
+		val rhsDimensionSize = rhs.shape.reduce({a, b -> a*b}) / rhs.shape[0]
+
+		for(i in (0..lhsDimensionSize-1)) {
+			for(j in (0..rhsDimensionSize-1)) {
+				// Calculate the position of the three left-most points.
+				val leftIndexArray = lhsDimensionOffset.map()
+				var accumulator = 0f
+				for(k in (0..this.shape.last()-1)) {
+
 				}
 			}
-		} else if(out.shape.size == 4) {
-			for(i in (0..out.shape[0]-1)) { // -1 because range is inclusive.
-				for(j in (0..out.shape[1]-1)) {
-					for(m in (0..out.shape[2]-1)) {
-						for(n in (0..out.shape[3]-1)) {
+		}
+		*/
 
-							var accumulator = 0f
-							for(k in (0..this.shape.last()-1)) {
-								accumulator += this[i,j,k]*rhs[k,m,n]
-							}
-							out[i,j,m,n] = accumulator
-
-						}
-					}
+		for(i in (0..this.data.size-1)) {
+			for(j in (0..rhs.data.size-1)) {
+				val lhsIndex = this.indexToIndexArray(i)
+				val rhsIndex = rhs.indexToIndexArray(j)
+				if(lhsIndex.last() == rhsIndex.first()) {
+					val outIndex = mutableListOf<Int>()
+					lhsIndex.dropLast(1).toCollection(outIndex)
+					rhsIndex.drop(1).toCollection(outIndex)
+					val expandedOutIndex : IntArray = outIndex.toIntArray()
+					out.set(*expandedOutIndex, value=out.get(*expandedOutIndex)+(this.data[i]*rhs.data[j]))
 				}
 			}
-		} else {
-			throw NotImplementedError("Sorry, tensor product with greater than four dimensions is not yet supported.")
 		}
 
 		//for(leftIndex in (0..))
@@ -144,7 +148,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		)
 
 		// Go through the values here and copy the items.
-		val maxIndex = out.shape.fold(1, {a, b -> a*b})
+		val maxIndex = out.shape.reduce({a, b -> a*b})
 		for(index in (0..maxIndex-1)) {
 			// Map from index to the position in the out object.
 			val outIndexArray = out.indexToIndexArray(index)
@@ -157,7 +161,7 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 
 	fun setSubtensor(axis: Int, axisIndex: Int, value: Tensor) {
 		// Go through the values here and copy the items.
-		val maxIndex = value.shape.fold(1, {a, b -> a*b})
+		val maxIndex = value.shape.reduce({a, b -> a*b})
 		for(index in (0..maxIndex-1)) {
 			// Map from index to the position in the out object.
 			val vIndexArray = value.indexToIndexArray(index)
@@ -205,10 +209,15 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 	}
 
 	fun transpose(): Tensor {
-		if(shape.size != 2) {
-			throw NotImplementedError("Not yet implemented for non-square matrices.")
+		if(shape.size > 2) {
+			throw NotImplementedError("Not yet implemented for greater than 2D matrices.")
+		} else if(shape.size == 2) {
+			return Tensor.newFromFun(shape[1], shape[0], initFunction = { index: Int -> this.get(index / this.shape[1], index % this.shape[1]) })
+		} else if(shape.size == 1) {
+			return Tensor.newFromFun(shape[0], 1, initFunction = { index: Int -> this.data[index] })
+		} else {
+			throw NotImplementedError("Transpose not valid for 0D matrices.")
 		}
-		return Tensor.newFromFun(shape[1], shape[0], initFunction = { index:Int -> this.get(index/this.shape[1], index%this.shape[1]) })
 	}
 
 	override fun toString(): String {

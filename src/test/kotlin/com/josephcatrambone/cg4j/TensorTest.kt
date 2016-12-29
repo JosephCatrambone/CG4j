@@ -29,6 +29,28 @@ class TensorTestBasics : StringSpec() {
 			})
 		}
 
+		"Tensor multiply check." {
+			val a = Tensor.ones(3, 5)
+			val b = Tensor(shape=intArrayOf(5, 3), data=floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f, 7f, 8f, 9f, 10f, 11f, 12f, 13f, 14f, 15f))
+			val c = a.mmul(b)
+
+			println(a)
+			println(b)
+			println(c)
+
+			c.data[0] shouldBe 35.0f
+			c.data[1] shouldBe 40.0f
+			c.data[2] shouldBe 45.0f
+
+			c.data[3] shouldBe 35.0f
+			c.data[4] shouldBe 40.0f
+			c.data[5] shouldBe 45.0f
+
+			c.data[6] shouldBe 35.0f
+			c.data[7] shouldBe 40.0f
+			c.data[8] shouldBe 45.0f
+		}
+
 		"Tensor stupid activities because the developer is a lazy shit who doesn't write proper tests" {
 			var r = Tensor.ones(3, 5)
 			var s = r.transpose()

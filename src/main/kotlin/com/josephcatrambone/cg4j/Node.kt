@@ -193,6 +193,54 @@ class AbsNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 }
 
+// Less rigorous mathematically than a softmax node.  Normalizes the gradient and the forward pass.
+class NormalizeNode(n:Node, var axis:Int) : Node(n.shape, arrayOf<Node>(n)) {
+
+	fun normalize(tensor:Tensor, axis:Int): Tensor {
+		val output = Tensor.zeros(*tensor.shape)
+		for(i in (0..tensor.shape[axis])) {
+			// Get this slice, total it up,
+			// Don't forget to add this to graph for serialize/deser.
+			val st = tensor.getSubtensor(axis, i)
+			val low:Float = st.data.min()!!
+			val high:Float = st.data.max()!!
+			output.setSubtensor(axis, i, st.add(-low).mul(1.0f/high))
+		}
+		return output
+	}
+
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		// Do slices along the given axis.
+		return normalize(inputValues[0], axis)
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		return arrayOf(
+				normalize(adjoint, axis)
+		)
+	}
+
+	override fun extraDataToString(separator:String):String {
+		return axis.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		this.axis = it.next().toInt()
+	}
+}
+
+class GradientNormalizeNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		return inputValues[0]
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		return arrayOf(
+			adjoint.mul(1.0f/Math.max(1.0f, Math.sqrt(adjoint.data.foldRight(0f, {acc, operand-> acc + operand*operand}).toDouble()).toFloat()))
+		)
+	}
+}
+
 class SimpleConvolutionNode(input:Node, numFilters:Int, stride:Int, spatialExtent:Int) : Node(
 		shape=intArrayOf(),
 		inputs=arrayOf<Node>()

@@ -144,6 +144,8 @@ class Graph {
 					"TanhNode" -> TanhNode(inputs[0])
 					"PowerNode" -> PowerNode(inputs[0], -1f)
 					"AbsNode" -> AbsNode(inputs[0])
+					"NormalizeNode" -> NormalizeNode(inputs[0], 0)
+					"GradientNormalizeNode" -> GradientNormalizeNode(inputs[0])
 					else -> throw RuntimeException("Unrecognized class type to deserialize: $className")
 				}
 				n.id = id
