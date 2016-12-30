@@ -42,20 +42,31 @@ class Tensor(var shape: IntArray, var data: FloatArray) {
 		// b, d, h, w -> index
 		// Treat the index as a 'count' item and iterate over the indices in order.
 		var quantLeft = index
-		val indexArray: MutableList<Int> = mutableListOf()
+		var pos = 0 // Slightly faster than withIndex, from my benchmarks.
+		val indexArray = IntArray(size=dimensionOffset.size)
 		for(dimensionSize in dimensionOffset) {
-			indexArray.add(quantLeft / dimensionSize)
+			indexArray[pos] = quantLeft / dimensionSize
 			quantLeft %= dimensionSize
+			pos++
 		}
-		return indexArray.toIntArray()
+		return indexArray
 	}
 
 	operator fun get(vararg index: Int): Float {
-		assert(index.size == shape.size)
+		if(index.size != shape.size) {
+			throw RuntimeException(
+				"Tensor access value mismatch: Tensor is of shape ${shape.joinToString()} but access only has ${index.size} values."
+			)
+		}
 		return data[indexArrayToIndex(*index)]
 	}
 
 	operator fun set(vararg index: Int, value: Float) {
+		if(index.size != shape.size) {
+			throw RuntimeException(
+					"Tensor access value mismatch: Tensor is of shape ${shape.joinToString()} but access only has ${index.size} values."
+			)
+		}
 		data[indexArrayToIndex(*index)] = value
 	}
 

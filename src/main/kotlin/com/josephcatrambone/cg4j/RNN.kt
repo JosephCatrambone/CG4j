@@ -38,7 +38,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		var previousHiddenValue : Node = hiddenStartNode
 		for(step in (0..x.shape[0]-1)) {
 			val inNode = InputNode(1, inputSize)
-			val nextHiddenState = TanhNode(
+			val nextHiddenState = SigmoidNode(
 				AddNode(
 					AddNode(
 						MatrixMultiplyNode(inNode, weightNode_ih),
@@ -49,7 +49,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 			)
 			val outNode = TanhNode(AddNode(MatrixMultiplyNode(nextHiddenState, weightNode_ho), biasNode_o))
 			inputNodes.add(inNode)
-			previousHiddenValue = nextHiddenState
+			previousHiddenValue = GradientClipNode(nextHiddenState)
 			outputNodes.add(outNode)
 
 			// Calculate the error for this timestep.
@@ -79,6 +79,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		weightNode_hh.value.sub_i(grad[weightNode_hh]!!.mul(learningRate))
 		weightNode_ho.value.sub_i(grad[weightNode_ho]!!.mul(learningRate))
 		biasNode_h.value.sub_i(grad[biasNode_h]!!.mul(learningRate))
+		biasNode_o.value.sub_i(grad[biasNode_o]!!.mul(learningRate))
 	}
 
 	// TODO: This returns a list of floats until we get Tensor vertical concat working.
@@ -90,7 +91,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		val inputNode = InputNode(inputSize)
 		val prevHiddenNode = InputNode(hiddenSize)
 
-		val nextHiddenState = TanhNode(
+		val nextHiddenState = SigmoidNode(
 			AddNode(
 				AddNode(
 					MatrixMultiplyNode(inputNode, weightNode_ih),
@@ -110,6 +111,8 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 			inputMap[prevHiddenNode] = hiddenState
 			if(inputTensor == null || i >= inputTensor.shape[0]) {
 				inputMap[inputNode] = previousOutput
+			} else {
+				inputMap[inputNode] = inputTensor.getSubtensor(0, i)
 			}
 
 			val fwd = graph.forward(outNode, inputMap)

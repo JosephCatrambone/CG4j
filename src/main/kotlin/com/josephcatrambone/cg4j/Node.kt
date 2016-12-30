@@ -160,6 +160,19 @@ class TanhNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
 	}
 }
 
+class SigmoidNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		return inputValues[0].elementOperation { x -> 1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat()) }
+	}
+
+	// Derivative of sigmoid = s * (1-s)
+	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+		return arrayOf(
+			adjoint.mul(forwardValues[0].elementOperation { x -> (1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat())) * (1.0f-(1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat()))) })
+		)
+	}
+}
+
 class PowerNode(base:Node, var exponent: Float) : Node(shape=base.shape, inputs=arrayOf<Node>(base)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0].pow(exponent)
@@ -203,8 +216,8 @@ class NormalizeNode(n:Node, var axis:Int) : Node(n.shape, arrayOf<Node>(n)) {
 			// Don't forget to add this to graph for serialize/deser.
 			val st = tensor.getSubtensor(axis, i)
 			val low:Float = st.data.min()!!
-			val high:Float = st.data.max()!!
-			output.setSubtensor(axis, i, st.add(-low).mul(1.0f/high))
+			val high:Float = st.data.max()!! - low
+			output.setSubtensor(axis, i, st.add(-low).mul(1.0f/(1.0e-6f+high)))
 		}
 		return output
 	}
@@ -229,15 +242,22 @@ class NormalizeNode(n:Node, var axis:Int) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 }
 
-class GradientNormalizeNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
+class GradientClipNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0]
 	}
 
 	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
-		return arrayOf(
-			adjoint.mul(1.0f/Math.max(1.0f, Math.sqrt(adjoint.data.foldRight(0f, {acc, operand-> acc + operand*operand}).toDouble()).toFloat()))
-		)
+		val magnitude = Math.sqrt(adjoint.data.foldRight(0f, {acc, operand-> acc + operand*operand}).toDouble()).toFloat()
+		if(magnitude > 1.0f) { // Magnitude can't be negative.
+			return arrayOf(
+				adjoint.elementOperation { x -> x/magnitude }
+			)
+		} else {
+			return arrayOf(
+				adjoint
+			)
+		}
 	}
 }
 
