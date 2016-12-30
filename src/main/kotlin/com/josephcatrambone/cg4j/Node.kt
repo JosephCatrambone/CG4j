@@ -173,6 +173,28 @@ class SigmoidNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
 	}
 }
 
+class LeakyReLUNode(n:Node, var leak:Float) : Node(n.shape, arrayOf<Node>(n)) {
+
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		// Do slices along the given axis.
+		return inputValues[0].elementOperation { x -> if(x >= 0) { x } else { leak*x } }
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		return arrayOf(
+			forwardValues[0].elementOperation(adjoint, { x, adj -> if(x >= 0f) { adj } else {leak*adj} })
+		)
+	}
+
+	override fun extraDataToString(separator:String):String {
+		return leak.toString()
+	}
+
+	override fun extraDataFromStringIterator(it: Iterator<String>) {
+		this.leak = it.next().toFloat()
+	}
+}
+
 class PowerNode(base:Node, var exponent: Float) : Node(shape=base.shape, inputs=arrayOf<Node>(base)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
 		return inputValues[0].pow(exponent)

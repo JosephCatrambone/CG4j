@@ -59,10 +59,14 @@ class GradientTest : StringSpec() {
 		}
 
 		"Gradient random check" {
-			assert(getNodeGradientOrder(
-				{input -> SigmoidNode(input)},
-				{ x -> 1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat())}
-			) < 0.1f)
+			assert(
+				getNodeGradientOrder({input -> SigmoidNode(input)}, { x -> 1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat())}) < 0.1f
+			)
+
+			assert(getNodeGradientOrder({input -> TanhNode(input)}, { x -> Math.tanh(x.toDouble()).toFloat()}) < 0.1f)
+
+			// This is not differentiable at zero, but it looks right to me.
+			//assert(getNodeGradientOrder({input -> LeakyReLUNode(input, 0.01f)}, { x -> if(x >= 0) { x } else { 0.01f*x }}) < 0.1f)
 		}
 	}
 }

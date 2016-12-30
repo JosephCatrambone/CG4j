@@ -143,6 +143,7 @@ class Graph {
 					"MatrixMultiplyNode" -> MatrixMultiplyNode(inputs[0], inputs[1])
 					"TanhNode" -> TanhNode(inputs[0])
 					"SigmoidNode" -> SigmoidNode(inputs[0])
+					"LeakyReLUNode" -> LeakyReLUNode(inputs[0], 0f)
 					"PowerNode" -> PowerNode(inputs[0], -1f)
 					"AbsNode" -> AbsNode(inputs[0])
 					"NormalizeNode" -> NormalizeNode(inputs[0], 0)

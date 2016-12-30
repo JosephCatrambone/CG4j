@@ -13,6 +13,15 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 	var biasNode_h: VariableNode = VariableNode(hiddenSize)
 	var biasNode_o: VariableNode = VariableNode(inputSize)
 
+	/*
+	i = sig(x_i*U_i + s_t-1*W_i)
+	f = sig(x_t*U_f + s_t-1*W_f)
+	o = sig(x_t*U_o + s_t-1*W_o)
+	g = tanh(x_t*U_g + s_t-1*W_g)
+	c_t = c_t-1 dot f + g dot i
+	s_t = tanh(c_t) dot o
+	 */
+
 	init {
 		val random = Random()
 		weightNode_ih.value.elementOperation_i { i -> random.nextGaussian().toFloat()*startWeightScale }

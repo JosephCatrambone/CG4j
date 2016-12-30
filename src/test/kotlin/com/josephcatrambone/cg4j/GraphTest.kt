@@ -80,13 +80,12 @@ class GraphTest : StringSpec() {
 				b_y.value.sub_i(grad[b_y]!!.mul(LEARNING_RATE))
 			}
 
-			//g.save(File("test_outputXOR.txt"))
-
 			assert(g.getOutput(out, mapOf(x to Tensor(intArrayOf(1, 2), floatArrayOf(0f, 0f)))).data[0] < 0.1f)
 			assert(g.getOutput(out, mapOf(x to Tensor(intArrayOf(1, 2), floatArrayOf(1f, 0f)))).data[0] > 0.9f)
 			assert(g.getOutput(out, mapOf(x to Tensor(intArrayOf(1, 2), floatArrayOf(0f, 1f)))).data[0] > 0.9f)
 			assert(g.getOutput(out, mapOf(x to Tensor(intArrayOf(1, 2), floatArrayOf(1f, 1f)))).data[0] < 0.1f)
-		}
 
+			//g.save(File("outputXOR.txt"))
+		}
 	}
 }
