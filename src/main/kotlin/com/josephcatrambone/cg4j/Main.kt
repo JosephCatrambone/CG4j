@@ -95,10 +95,10 @@ fun testRNN() {
 
 	val rnn = RNN(5, 20)
 	val startTime = System.currentTimeMillis()
-	var learningRate = 0.2f
+	var learningRate = 0.5f
 	for(i in (0..50000)) {
 		rnn.fit(x, y, learningRate)
-		//learningRate *= 0.9999f
+		learningRate *= 0.9999f
 	}
 	println(learningRate)
 	val endTime = System.currentTimeMillis()

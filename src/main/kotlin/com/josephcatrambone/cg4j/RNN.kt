@@ -10,8 +10,8 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 	var weightNode_ih: VariableNode = VariableNode(inputSize, hiddenSize)
 	var weightNode_hh: VariableNode = VariableNode(hiddenSize, hiddenSize)
 	var weightNode_ho: VariableNode = VariableNode(hiddenSize, inputSize)
-	var biasNode_h: VariableNode = VariableNode(hiddenSize)
-	var biasNode_o: VariableNode = VariableNode(inputSize)
+	var biasNode_h: VariableNode = VariableNode(1, hiddenSize)
+	var biasNode_o: VariableNode = VariableNode(1, inputSize)
 
 	/*
 	i = sig(x_i*U_i + s_t-1*W_i)
@@ -62,12 +62,10 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 			outputNodes.add(outNode)
 
 			// Calculate the error for this timestep.
-			val target = InputNode(inputSize)
+			val target = InputNode(1, inputSize)
 			val error = AbsNode(SubtractNode(outNode, target))
 			targetNodes.add(target)
 			errorNodes.add(error)
-
-			graph.add(error)
 			// TODO: Inject a gradient normalization node in here.
 		}
 
@@ -79,9 +77,13 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 			inputMap[targetNodes[i]] = y.getSubtensor(0, i)
 		}
 
+		// Make one final output operation which we will minimize.
+		val totalError = AddNode(*errorNodes.toTypedArray())
+		graph.add(totalError)
+
 		// Grads
-		val fwd = graph.forward(errorNodes.last(), inputMap)
-		val grad = graph.reverse(errorNodes.last(), inputMap, fwd)
+		val fwd = graph.forward(totalError, inputMap)
+		val grad = graph.reverse(totalError, inputMap, fwd)
 
 		// Apply gradients!
 		weightNode_ih.value.sub_i(grad[weightNode_ih]!!.mul(learningRate))
@@ -97,8 +99,8 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 
 		// Build our graph.
 		val graph = Graph()
-		val inputNode = InputNode(inputSize)
-		val prevHiddenNode = InputNode(hiddenSize)
+		val inputNode = InputNode(1, inputSize)
+		val prevHiddenNode = InputNode(1, hiddenSize)
 
 		val nextHiddenState = SigmoidNode(
 			AddNode(

@@ -80,13 +80,21 @@ class AddConstantNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs
 	}
 }
 
-class AddNode(lhs:Node, rhs:Node) : Node(lhs.shape, arrayOf<Node>(lhs, rhs)) {
+class AddNode(vararg inputs:Node) : Node(inputs[0].shape, arrayOf<Node>(*inputs)) {
 	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].add(inputValues[1])
+		val out:Tensor = Tensor.zeros(*this.shape)
+		for(t in inputValues) {
+			out.add_i(t)
+		}
+		return out
 	}
 
 	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
-		return arrayOf(adjoint, adjoint)
+		val adjointList = mutableListOf<Tensor>()
+		for(fv in forwardValues) {
+			adjointList.add(adjoint) // A copy of the adjoint ref.  Do we want to clone this?
+		}
+		return adjointList.toTypedArray()
 	}
 }
 
