@@ -291,6 +291,63 @@ class GradientClipNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 }
 
+class RepmatNode(n:Node, tilingAxis:Int, count:Int) : Node(n.shape, arrayOf<Node>(n)) {
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		throw NotImplementedError()
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		throw NotImplementedError()
+	}
+}
+
+class HStackNode(left:Node, right:Node) : Node(IntArray(size=left.shape.size), arrayOf<Node>(left, right)) {
+
+	val splitPoint = left.shape.last()
+
+	// Concatenate two matrices next to one another on the last dimension.
+	init {
+		assert(left.shape.size == right.shape.size)
+		// Copy the dimensions from the left.
+		left.shape.mapIndexed { index, value -> this.shape[index] = value }
+
+		// Resize the last index.
+		this.shape[this.shape.lastIndex] = left.shape.last()+right.shape.last()
+	}
+
+	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+		val out = Tensor.zeros(*this.shape)
+		for(i in (0..out.data.size-1)) {
+			val outIndex = out.indexToIndexArray(i)
+			val sourceIndex = outIndex.clone()
+			if(outIndex.last() >= splitPoint) {
+				sourceIndex[sourceIndex.lastIndex] -= splitPoint
+				out.set(*outIndex, value=inputValues[1].get(*sourceIndex))
+			} else {
+				out.set(*outIndex, value=inputValues[0].get(*sourceIndex))
+			}
+		}
+		return out
+	}
+
+	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+		// Split the adjoint.
+		val leftAdjoint = Tensor.zeros(*forwardValues[0].shape)
+		val rightAdjoint = Tensor.zeros(*forwardValues[1].shape)
+		for(i in (0..adjoint.data.size-1)) {
+			val adjointIndex = adjoint.indexToIndexArray(i)
+			val targetIndex = adjointIndex.clone()
+			if(adjointIndex.last() >= splitPoint) {
+				targetIndex[targetIndex.lastIndex] -= splitPoint
+				rightAdjoint.set(*targetIndex, value=adjoint.get(*adjointIndex))
+			} else {
+				leftAdjoint.set(*targetIndex, value=adjoint.get(*adjointIndex))
+			}
+		}
+		return arrayOf(leftAdjoint, rightAdjoint)
+	}
+}
+
 class SimpleConvolutionNode(input:Node, numFilters:Int, stride:Int, spatialExtent:Int) : Node(
 		shape=intArrayOf(),
 		inputs=arrayOf<Node>()

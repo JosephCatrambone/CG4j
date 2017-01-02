@@ -68,5 +68,21 @@ class GradientTest : StringSpec() {
 			// This is not differentiable at zero, but it looks right to me.
 			//assert(getNodeGradientOrder({input -> LeakyReLUNode(input, 0.01f)}, { x -> if(x >= 0) { x } else { 0.01f*x }}) < 0.1f)
 		}
+
+		"HStack should correctly backprop adjoints." {
+			val g = Graph()
+			val x = InputNode(1, 2)
+			val y = InputNode(1, 2)
+			val out = ConstantMultiplyNode(HStackNode(ConstantMultiplyNode(x, 2.0f), ConstantMultiplyNode(y, 3.0f)), 4.0f)
+			g.add(out)
+			val inputMap = mapOf<Node, Tensor>(x to Tensor.ones(1, 2), y to Tensor.ones(1, 2))
+			val fwd = g.forward(out, inputMap)
+			var grad = g.reverse(out, inputMap, fwd)
+
+			println(grad[x])
+			println(grad[y])
+
+			grad[y]!![0, 0] shouldBe 12.0f
+		}
 	}
 }
