@@ -18,7 +18,7 @@ class Graph {
 		return forward(output, inputSet)[output]!!
 	}
 
-	fun forward(output: Node, inputSet: Map<Node, INDArray>, cache: MutableMap<Node, INDArray> = mutableMapOf<Node, INDArray>() ): Map<Node, Tensor> {
+	fun forward(output: Node, inputSet: Map<Node, INDArray>, cache: MutableMap<Node, INDArray> = mutableMapOf<Node, INDArray>() ): Map<Node, INDArray> {
 		// Handle the input-node case implicitly.
 		if(output in inputSet) {
 			cache[output] = inputSet[output]!!
@@ -38,7 +38,7 @@ class Graph {
 		return cache
 	}
 
-	fun reverse(output: Node, inputSet: Map<Node, INDArray>, activations: Map<Node, INDArray>, adjointCache: MutableMap<Node, INDArray> = mutableMapOf<Node, Tensor>()): Map<Node, Tensor> {
+	fun reverse(output: Node, inputSet: Map<Node, INDArray>, activations: Map<Node, INDArray>, adjointCache: MutableMap<Node, INDArray> = mutableMapOf<Node, INDArray>()): Map<Node, INDArray> {
 		// If the cache is empty, we want to assign this to all ones.
 		if(adjointCache.isEmpty()) {
 			adjointCache[output] = Nd4j.ones(*output.shape) // This should probably be a 1x1.

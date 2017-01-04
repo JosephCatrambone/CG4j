@@ -55,12 +55,12 @@ class VariableNode(vararg shape:Int) : Node(shape) {
 	}
 
 	override fun extraDataToString(separator:String):String {
-		return value.toString()
+		return Nd4j.toByteArray(value).toString()
 	}
 
 	override fun extraDataFromStringIterator(it: Iterator<String>) {
 		//super.extraDataFromStringIterator(it)
-		this.value = INDArray.fromString(it.next())
+		this.value = Nd4j.fromByteArray(it.next().toByteArray())
 	}
 
 }
@@ -193,9 +193,12 @@ class LeakyReLUNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	}
 
 	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
+		throw NotImplementedError()
+		/*
 		return arrayOf(
 			forwardValues[0].elementOperation(adjoint, { x, adj -> if(x >= 0f) { adj } else {leak*adj} })
 		)
+		*/
 	}
 }
 
@@ -237,28 +240,7 @@ class AbsNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
  */
 class SoftmaxNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
-		val out = Nd4j.zerosLike(inputValues[0])
-		var accumulator:Float = 0f
-		var started = true
-		for(outerIndex in 0..inputValues[0].data.size-1) { // shape.reduce{a,b->a*b}
-			// First, go over all these
-			val index = out.indexToIndexArray(outerIndex)
-			if(index.last() == 0 && !started) {
-				// Go over all the values in this last item again.
-				val indexPrefix = out.indexToIndexArray(outerIndex-1).drop(1)
-				for (innerIndex in 0..inputValues[0].shape.last() - 1) {
-					val newIndex = indexPrefix.plus(innerIndex)
-					out.set(*newIndex.toIntArray(), value=inputValues[0].get(*newIndex.toIntArray()) / accumulator)
-				}
-				// Reset our values
-				started = true
-				accumulator = 0f
-			} else {
-				started = false // We've handled one item.
-			}
-			accumulator += Math.exp(inputValues[0].get(*index).toDouble()).toFloat()
-		}
-		return out
+		throw NotImplementedError()
 	}
 
 	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {

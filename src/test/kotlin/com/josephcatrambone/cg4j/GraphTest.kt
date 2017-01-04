@@ -9,10 +9,6 @@ import java.io.File
  */
 class GraphTest : StringSpec() {
 	init {
-		"Tensor ones (5, 5, 5) should have 125 elements." {
-			Tensor.ones(5, 5, 5).data.size shouldBe 125
-		}
-
 		"Serialization Test" {
 			val g = Graph()
 			val i = InputNode(1, 2, 3)
