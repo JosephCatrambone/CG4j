@@ -58,7 +58,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 			)
 			val outNode = TanhNode(AddNode(MatrixMultiplyNode(nextHiddenState, weightNode_ho), biasNode_o))
 			inputNodes.add(inNode)
-			previousHiddenValue = GradientClipNode(nextHiddenState)
+			previousHiddenValue = nextHiddenState
 			outputNodes.add(outNode)
 
 			// Calculate the error for this timestep.

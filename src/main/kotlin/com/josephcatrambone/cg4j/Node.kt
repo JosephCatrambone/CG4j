@@ -1,5 +1,9 @@
 package com.josephcatrambone.cg4j
 
+import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.factory.Nd4j
+import org.nd4j.linalg.ops.transforms.Transforms
+
 /**
  * Created by jcatrambone on 12/22/16.
  * Some quick notes about approach:
@@ -17,8 +21,8 @@ package com.josephcatrambone.cg4j
 abstract class Node(var shape:IntArray=intArrayOf(), var inputs:Array<Node> =arrayOf<Node>()) {
 	var id: Int = -1 // When we serialize, we write these IDs instead of recursively serializing objects.
 	var name:String = ""
-	abstract fun forwardOperation(vararg inputValues: Tensor): Tensor
-	abstract fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor>
+	abstract fun forwardOperation(vararg inputValues: INDArray): INDArray
+	abstract fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray>
 
 	// These are used for serialization.
 	// By default, the graph will populate the id, name, shape, and inputs.
@@ -30,23 +34,23 @@ abstract class Node(var shape:IntArray=intArrayOf(), var inputs:Array<Node> =arr
 class InputNode(vararg shape:Int) : Node(shape) {
 	//constructor() : this(-1) {} // Allow empty constructor when reloading from disk.  We'll set these later.
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		throw RuntimeException("You should never see this.  The graph should be checking the inputs before this gets called.")
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf()
 	}
 }
 
 class VariableNode(vararg shape:Int) : Node(shape) {
-	var value: Tensor = Tensor.zeros(*shape)
+	var value: INDArray = Nd4j.zeros(*shape)
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return value
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf()
 	}
 
@@ -56,17 +60,17 @@ class VariableNode(vararg shape:Int) : Node(shape) {
 
 	override fun extraDataFromStringIterator(it: Iterator<String>) {
 		//super.extraDataFromStringIterator(it)
-		this.value = Tensor.fromString(it.next())
+		this.value = INDArray.fromString(it.next())
 	}
 
 }
 
 class AddConstantNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return inputValues[0].add(c)
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(adjoint)
 	}
 
@@ -81,16 +85,16 @@ class AddConstantNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs
 }
 
 class AddNode(vararg inputs:Node) : Node(inputs[0].shape, arrayOf<Node>(*inputs)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		val out:Tensor = Tensor.zeros(*this.shape)
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		val out:INDArray = Nd4j.zeros(*this.shape)
 		for(t in inputValues) {
-			out.add_i(t)
+			out.addi(t)
 		}
 		return out
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
-		val adjointList = mutableListOf<Tensor>()
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
+		val adjointList = mutableListOf<INDArray>()
 		for(fv in forwardValues) {
 			adjointList.add(adjoint) // A copy of the adjoint ref.  Do we want to clone this?
 		}
@@ -99,21 +103,21 @@ class AddNode(vararg inputs:Node) : Node(inputs[0].shape, arrayOf<Node>(*inputs)
 }
 
 class SubtractNode(lhs:Node, rhs:Node) : Node(lhs.shape, arrayOf<Node>(lhs, rhs)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return inputValues[0].sub(inputValues[1])
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(adjoint, adjoint.neg())
 	}
 }
 
 class ConstantMultiplyNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node>(lhs)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return inputValues[0].mul(c)
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(adjoint.mul(c))
 	}
 
@@ -127,11 +131,11 @@ class ConstantMultiplyNode(lhs:Node, var c:Float) : Node(lhs.shape, arrayOf<Node
 }
 
 class ElementMultiplyNode(lhs:Node, rhs:Node) : Node(lhs.shape, arrayOf<Node>(lhs, rhs)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return inputValues[0].mul(inputValues[1])
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(forwardValues[1].mul(adjoint), forwardValues[0].mul(adjoint))
 	}
 }
@@ -142,11 +146,11 @@ class MatrixMultiplyNode : Node {
 
 	}
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		return inputValues[0].mmul(inputValues[1])
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(
 			// Left adjoint. If C=AB, adj(a) = adj(c)*bT
 			adjoint.mmul(forwardValues[1].transpose()),
@@ -157,60 +161,52 @@ class MatrixMultiplyNode : Node {
 }
 
 class TanhNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].tanh()
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		return Transforms.tanh(inputValues[0])
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(
-				adjoint.mul(Tensor.ones(*adjoint.shape).sub(forwardValues[0].tanh().mul(forwardValues[0].tanh())))
+			adjoint.mul(Nd4j.ones(*adjoint.shape()).sub(Transforms.tanh(forwardValues[0]).mul(Transforms.tanh(forwardValues[0]))))
 		)
 	}
 }
 
 class SigmoidNode(n:Node) : Node(shape=n.shape, inputs=arrayOf<Node>(n)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].elementOperation { x -> 1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat()) }
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		return Transforms.sigmoid(inputValues[0])
 	}
 
 	// Derivative of sigmoid = s * (1-s)
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(
-			adjoint.mul(forwardValues[0].elementOperation { x -> (1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat())) * (1.0f-(1.0f/(1.0f+Math.exp(-x.toDouble()).toFloat()))) })
+			adjoint.mul(Transforms.sigmoid(forwardValues[0]).mul(Nd4j.onesLike(forwardValues[0]).subi(Transforms.sigmoid(forwardValues[0]))))
 		)
 	}
 }
 
-class LeakyReLUNode(n:Node, var leak:Float) : Node(n.shape, arrayOf<Node>(n)) {
+class LeakyReLUNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
 		// Do slices along the given axis.
-		return inputValues[0].elementOperation { x -> if(x >= 0) { x } else { leak*x } }
+		return Transforms.leakyRelu(inputValues[0])
 	}
 
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
 		return arrayOf(
 			forwardValues[0].elementOperation(adjoint, { x, adj -> if(x >= 0f) { adj } else {leak*adj} })
 		)
 	}
-
-	override fun extraDataToString(separator:String):String {
-		return leak.toString()
-	}
-
-	override fun extraDataFromStringIterator(it: Iterator<String>) {
-		this.leak = it.next().toFloat()
-	}
 }
 
 class PowerNode(base:Node, var exponent: Float) : Node(shape=base.shape, inputs=arrayOf<Node>(base)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].pow(exponent)
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		return Transforms.pow(inputValues[0], exponent)
 	}
 
-	override fun adjointOperation(forwardValues:Array<Tensor>, adjoint:Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues:Array<INDArray>, adjoint:INDArray): Array<INDArray> {
 		return arrayOf(
-			adjoint.mul(forwardValues[0].pow(exponent-1.0f).mul(exponent))
+			adjoint.mul(Transforms.pow(forwardValues[0], (exponent-1.0f)).mul(exponent))
 		)
 	}
 
@@ -225,78 +221,49 @@ class PowerNode(base:Node, var exponent: Float) : Node(shape=base.shape, inputs=
 }
 
 class AbsNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].abs()
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		return Transforms.abs(inputValues[0])
 	}
 
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
 		return arrayOf(
-			adjoint.mul(forwardValues[0].sign())
+			adjoint.mul(Transforms.sign(forwardValues[0]))
 		)
 	}
 }
 
-// Less rigorous mathematically than a softmax node.  Normalizes the gradient and the forward pass.
-class NormalizeNode(n:Node, var axis:Int) : Node(n.shape, arrayOf<Node>(n)) {
-
-	fun normalize(tensor:Tensor, axis:Int): Tensor {
-		val output = Tensor.zeros(*tensor.shape)
-		for(i in (0..tensor.shape[axis])) {
-			// Get this slice, total it up,
-			// Don't forget to add this to graph for serialize/deser.
-			val st = tensor.getSubtensor(axis, i)
-			val low:Float = st.data.min()!!
-			val high:Float = st.data.max()!! - low
-			output.setSubtensor(axis, i, st.add(-low).mul(1.0f/(1.0e-6f+high)))
+/*** SoftmaxNode
+ * Performs softmax on the values of the last axis of the tensor.
+ */
+class SoftmaxNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		val out = Nd4j.zerosLike(inputValues[0])
+		var accumulator:Float = 0f
+		var started = true
+		for(outerIndex in 0..inputValues[0].data.size-1) { // shape.reduce{a,b->a*b}
+			// First, go over all these
+			val index = out.indexToIndexArray(outerIndex)
+			if(index.last() == 0 && !started) {
+				// Go over all the values in this last item again.
+				val indexPrefix = out.indexToIndexArray(outerIndex-1).drop(1)
+				for (innerIndex in 0..inputValues[0].shape.last() - 1) {
+					val newIndex = indexPrefix.plus(innerIndex)
+					out.set(*newIndex.toIntArray(), value=inputValues[0].get(*newIndex.toIntArray()) / accumulator)
+				}
+				// Reset our values
+				started = true
+				accumulator = 0f
+			} else {
+				started = false // We've handled one item.
+			}
+			accumulator += Math.exp(inputValues[0].get(*index).toDouble()).toFloat()
 		}
-		return output
+		return out
 	}
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		// Do slices along the given axis.
-		return normalize(inputValues[0], axis)
-	}
-
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
-		return arrayOf(
-				normalize(adjoint, axis)
-		)
-	}
-
-	override fun extraDataToString(separator:String):String {
-		return axis.toString()
-	}
-
-	override fun extraDataFromStringIterator(it: Iterator<String>) {
-		this.axis = it.next().toInt()
-	}
-}
-
-class GradientClipNode(n:Node) : Node(n.shape, arrayOf<Node>(n)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0]
-	}
-
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
-		val magnitude = Math.sqrt(adjoint.data.foldRight(0f, {acc, operand-> acc + operand*operand}).toDouble()).toFloat()
-		if(magnitude > 1.0f) { // Magnitude can't be negative.
-			return arrayOf(
-				adjoint.elementOperation { x -> x/magnitude }
-			)
-		} else {
-			return arrayOf(
-				adjoint
-			)
-		}
-	}
-}
-
-class RepmatNode(n:Node, tilingAxis:Int, count:Int) : Node(n.shape, arrayOf<Node>(n)) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		throw NotImplementedError()
-	}
-
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
+		// If the output probability was [0.2, 0.3, 0.5] and the correct answer was [0, 1, 0],
+		// the delta would be [0.2, -0.7, 0.5].
 		throw NotImplementedError()
 	}
 }
@@ -315,50 +282,16 @@ class HStackNode(left:Node, right:Node) : Node(IntArray(size=left.shape.size), a
 		this.shape[this.shape.lastIndex] = left.shape.last()+right.shape.last()
 	}
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		val out = Tensor.zeros(*this.shape)
-		for(i in (0..out.data.size-1)) {
-			val outIndex = out.indexToIndexArray(i)
-			val sourceIndex = outIndex.clone()
-			if(outIndex.last() >= splitPoint) {
-				sourceIndex[sourceIndex.lastIndex] -= splitPoint
-				out.set(*outIndex, value=inputValues[1].get(*sourceIndex))
-			} else {
-				out.set(*outIndex, value=inputValues[0].get(*sourceIndex))
-			}
-		}
-		return out
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		return Nd4j.concat(0, *inputValues)
 	}
 
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
+	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
 		// Split the adjoint.
-		val leftAdjoint = Tensor.zeros(*forwardValues[0].shape)
-		val rightAdjoint = Tensor.zeros(*forwardValues[1].shape)
-		for(i in (0..adjoint.data.size-1)) {
-			val adjointIndex = adjoint.indexToIndexArray(i)
-			val targetIndex = adjointIndex.clone()
-			if(adjointIndex.last() >= splitPoint) {
-				targetIndex[targetIndex.lastIndex] -= splitPoint
-				rightAdjoint.set(*targetIndex, value=adjoint.get(*adjointIndex))
-			} else {
-				leftAdjoint.set(*targetIndex, value=adjoint.get(*adjointIndex))
-			}
-		}
-		return arrayOf(leftAdjoint, rightAdjoint)
-	}
-}
 
-class SimpleConvolutionNode(input:Node, numFilters:Int, stride:Int, spatialExtent:Int) : Node(
-		shape=intArrayOf(),
-		inputs=arrayOf<Node>()
-) {
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].abs()
-	}
-
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
 		return arrayOf(
-				adjoint.mul(forwardValues[0].sign())
+			adjoint.getColumns(*IntArray(size=forwardValues[0].columns(), init = { a -> a })),
+			adjoint.getColumns(*IntArray(size=forwardValues[1].columns(), init = { a -> a+forwardValues[0].columns() }))
 		)
 	}
 }
@@ -373,13 +306,11 @@ class ConvolutionNode(input:Node, kernel:Node, stride:Int) : Node(IntArray(size=
 
 	}
 
-	override fun forwardOperation(vararg inputValues: Tensor): Tensor {
-		return inputValues[0].abs()
+	override fun forwardOperation(vararg inputValues: INDArray): INDArray {
+		throw NotImplementedError()
 	}
 
-	override fun adjointOperation(forwardValues: Array<Tensor>, adjoint: Tensor): Array<Tensor> {
-		return arrayOf(
-				adjoint.mul(forwardValues[0].sign())
-		)
+	override fun adjointOperation(forwardValues: Array<INDArray>, adjoint: INDArray): Array<INDArray> {
+		throw NotImplementedError()
 	}
 }

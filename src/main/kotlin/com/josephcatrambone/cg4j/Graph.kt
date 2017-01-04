@@ -1,5 +1,7 @@
 package com.josephcatrambone.cg4j
 
+import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.factory.Nd4j
 import java.io.File
 import java.util.*
 
@@ -12,11 +14,11 @@ class Graph {
 	var lastId: Int = 0
 	var nodes = ArrayList<Node>() // Could be 'mutableList' in Kotlin, but I want to be sure it's not actually a list.
 
-	fun getOutput(output: Node, inputSet: Map<Node, Tensor>): Tensor {
+	fun getOutput(output: Node, inputSet: Map<Node, INDArray>): INDArray {
 		return forward(output, inputSet)[output]!!
 	}
 
-	fun forward(output: Node, inputSet: Map<Node, Tensor>, cache: MutableMap<Node, Tensor> = mutableMapOf<Node, Tensor>() ): Map<Node, Tensor> {
+	fun forward(output: Node, inputSet: Map<Node, INDArray>, cache: MutableMap<Node, INDArray> = mutableMapOf<Node, INDArray>() ): Map<Node, Tensor> {
 		// Handle the input-node case implicitly.
 		if(output in inputSet) {
 			cache[output] = inputSet[output]!!
@@ -25,7 +27,7 @@ class Graph {
 		// Are we done?
 		if(output !in cache) {
 			// Nope.  Recursively solve for the inputs.
-			var inputValues: Array<Tensor> = arrayOf()
+			var inputValues: Array<INDArray> = arrayOf()
 			for (i in output.inputs) {
 				forward(i, inputSet, cache) // Should calculate the cache.
 				inputValues = inputValues.plus(cache[i]!!)
@@ -36,30 +38,30 @@ class Graph {
 		return cache
 	}
 
-	fun reverse(output: Node, inputSet: Map<Node, Tensor>, activations: Map<Node, Tensor>, adjointCache: MutableMap<Node, Tensor> = mutableMapOf<Node, Tensor>()): Map<Node, Tensor> {
+	fun reverse(output: Node, inputSet: Map<Node, INDArray>, activations: Map<Node, INDArray>, adjointCache: MutableMap<Node, INDArray> = mutableMapOf<Node, Tensor>()): Map<Node, Tensor> {
 		// If the cache is empty, we want to assign this to all ones.
 		if(adjointCache.isEmpty()) {
-			adjointCache[output] = Tensor.ones(*output.shape) // This should probably be a 1x1.
+			adjointCache[output] = Nd4j.ones(*output.shape) // This should probably be a 1x1.
 		}
 
 		// Calculate the adjoint values of the inputs to this function, then recurse into them.
 		// First, calculate the adjoint of each child.
 		// Make an arrayList of Tensors from the inputs to this node.
-		val forwardArguments : MutableList<Tensor> = mutableListOf() // Note: can't do `activations.filterKeys { nodeId -> nodeId in inputs[output] }.values.toTypedArray()` because we may get dupes in args.
+		val forwardArguments : MutableList<INDArray> = mutableListOf() // Note: can't do `activations.filterKeys { nodeId -> nodeId in inputs[output] }.values.toTypedArray()` because we may get dupes in args.
 		for(nodeId in output.inputs) {
 			forwardArguments.add(activations[nodeId]!!)
 		}
 		val fwd = forwardArguments.toTypedArray()
 
 		// Calculate updates.
-		var adjointUpdates : Array<Tensor> = output.adjointOperation(fwd, adjointCache[output]!!)
+		var adjointUpdates : Array<INDArray> = output.adjointOperation(fwd, adjointCache[output]!!)
 
 		// Apply updates.
 		for((nodeIndex, adjointValue) in output.inputs.zip(adjointUpdates)) {
 			if(nodeIndex !in adjointCache) {
 				adjointCache[nodeIndex] = adjointValue.dup()
 			} else {
-				adjointCache[nodeIndex]!!.add_i(adjointValue)
+				adjointCache[nodeIndex]!!.addi(adjointValue)
 			}
 		}
 
@@ -143,11 +145,9 @@ class Graph {
 					"MatrixMultiplyNode" -> MatrixMultiplyNode(inputs[0], inputs[1])
 					"TanhNode" -> TanhNode(inputs[0])
 					"SigmoidNode" -> SigmoidNode(inputs[0])
-					"LeakyReLUNode" -> LeakyReLUNode(inputs[0], 0f)
+					"LeakyReLUNode" -> LeakyReLUNode(inputs[0])
 					"PowerNode" -> PowerNode(inputs[0], -1f)
 					"AbsNode" -> AbsNode(inputs[0])
-					"NormalizeNode" -> NormalizeNode(inputs[0], 0)
-					"GradientClipNode" -> GradientClipNode(inputs[0])
 					else -> throw RuntimeException("Unrecognized class type to deserialize: $className")
 				}
 				n.id = id

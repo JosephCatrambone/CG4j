@@ -71,11 +71,11 @@ class GradientTest : StringSpec() {
 
 		"HStack should correctly backprop adjoints." {
 			val g = Graph()
-			val x = InputNode(1, 2)
-			val y = InputNode(1, 2)
+			val x = InputNode(3, 2)
+			val y = InputNode(3, 2)
 			val out = ConstantMultiplyNode(HStackNode(ConstantMultiplyNode(x, 2.0f), ConstantMultiplyNode(y, 3.0f)), 4.0f)
 			g.add(out)
-			val inputMap = mapOf<Node, Tensor>(x to Tensor.ones(1, 2), y to Tensor.ones(1, 2))
+			val inputMap = mapOf<Node, Tensor>(x to Tensor.ones(3, 2), y to Tensor.ones(3, 2))
 			val fwd = g.forward(out, inputMap)
 			var grad = g.reverse(out, inputMap, fwd)
 
