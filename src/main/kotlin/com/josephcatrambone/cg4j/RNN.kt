@@ -1,6 +1,8 @@
 package com.josephcatrambone.cg4j
 
 import com.sun.prism.paint.Gradient
+import org.nd4j.linalg.api.ndarray.INDArray
+import org.nd4j.linalg.factory.Nd4j
 import java.util.*
 
 /**
@@ -24,9 +26,11 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 
 	init {
 		val random = Random()
+		/*
 		weightNode_ih.value.elementOperation_i { i -> random.nextGaussian().toFloat()*startWeightScale }
 		weightNode_hh.value.elementOperation_i { i -> random.nextGaussian().toFloat()*startWeightScale }
 		weightNode_ho.value.elementOperation_i { i -> random.nextGaussian().toFloat()*startWeightScale }
+		*/
 	}
 
 	/*** fit
@@ -35,7 +39,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 	 * @param y A tensor of shape [sqeuence length, input size]
 	 * @param hiddenState The previous hidden state to use.  Defaults to a zero vector.
 	 */
-	fun fit(x:Tensor, y:Tensor, learningRate:Float, hiddenState:FloatArray = FloatArray(size=hiddenSize)) {
+	fun fit(x:INDArray, y:INDArray, learningRate:Float, hiddenState:FloatArray = FloatArray(size=hiddenSize)) {
 		val graph = Graph()
 		val inputNodes = mutableListOf<Node>()
 		val outputNodes = mutableListOf<Node>()
@@ -45,7 +49,7 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		// Unroll everything
 		val hiddenStartNode = InputNode(1, hiddenSize)
 		var previousHiddenValue : Node = hiddenStartNode
-		for(step in (0..x.shape[0]-1)) {
+		for(step in (0..x.rows())) {
 			val inNode = InputNode(1, inputSize)
 			val nextHiddenState = SigmoidNode(
 				AddNode(
@@ -70,11 +74,11 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		}
 
 		// Zip everything together and calculate the gradient.
-		val inputMap = mutableMapOf<Node, Tensor>()
-		inputMap[hiddenStartNode] = Tensor(shape=intArrayOf(1, hiddenSize), data=hiddenState)
+		val inputMap = mutableMapOf<Node, INDArray>()
+		inputMap[hiddenStartNode] = Nd4j.create(hiddenState, intArrayOf(1, hiddenSize))
 		for(i in (0..inputNodes.size-1)) {
-			inputMap[inputNodes[i]] = x.getSubtensor(0, i)
-			inputMap[targetNodes[i]] = y.getSubtensor(0, i)
+			inputMap[inputNodes[i]] = x.getRow(i)
+			inputMap[targetNodes[i]] = y.getRow(i)
 		}
 
 		// Make one final output operation which we will minimize.
@@ -86,15 +90,15 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		val grad = graph.reverse(totalError, inputMap, fwd)
 
 		// Apply gradients!
-		weightNode_ih.value.sub_i(grad[weightNode_ih]!!.mul(learningRate))
-		weightNode_hh.value.sub_i(grad[weightNode_hh]!!.mul(learningRate))
-		weightNode_ho.value.sub_i(grad[weightNode_ho]!!.mul(learningRate))
-		biasNode_h.value.sub_i(grad[biasNode_h]!!.mul(learningRate))
-		biasNode_o.value.sub_i(grad[biasNode_o]!!.mul(learningRate))
+		weightNode_ih.value.subi(grad[weightNode_ih]!!.mul(learningRate))
+		weightNode_hh.value.subi(grad[weightNode_hh]!!.mul(learningRate))
+		weightNode_ho.value.subi(grad[weightNode_ho]!!.mul(learningRate))
+		biasNode_h.value.subi(grad[biasNode_h]!!.mul(learningRate))
+		biasNode_o.value.subi(grad[biasNode_o]!!.mul(learningRate))
 	}
 
 	// TODO: This returns a list of floats until we get Tensor vertical concat working.
-	fun predict(maxSteps:Int, inputTensor:Tensor? = null, initialHiddenState: FloatArray = FloatArray(size = hiddenSize)): Pair<FloatArray, Array<FloatArray>> {
+	fun predict(maxSteps:Int, inputTensor:INDArray? = null, initialHiddenState: FloatArray = FloatArray(size = hiddenSize)): Pair<FloatArray, Array<FloatArray>> {
 		val outputArray = mutableListOf<FloatArray>()
 
 		// Build our graph.
@@ -115,23 +119,23 @@ class RNN(val inputSize: Int, val hiddenSize: Int, startWeightScale:Float = 0.1f
 		graph.add(outNode)
 
 		// Set up initial tensors.
-		val inputMap = mutableMapOf<Node, Tensor>()
-		var hiddenState = Tensor(shape=intArrayOf(1, hiddenSize), data=initialHiddenState)
-		var previousOutput = Tensor.zeros(1, inputSize)
+		val inputMap = mutableMapOf<Node, INDArray>()
+		var hiddenState = Nd4j.create(initialHiddenState, intArrayOf(1, hiddenSize))
+		var previousOutput = Nd4j.zeros(1, inputSize)
 		for(i in (0..maxSteps)) {
 			inputMap[prevHiddenNode] = hiddenState
-			if(inputTensor == null || i >= inputTensor.shape[0]) {
+			if(inputTensor == null || i >= inputTensor.rows()) {
 				inputMap[inputNode] = previousOutput
 			} else {
-				inputMap[inputNode] = inputTensor.getSubtensor(0, i)
+				inputMap[inputNode] = inputTensor.getRow(i)
 			}
 
 			val fwd = graph.forward(outNode, inputMap)
 			hiddenState = fwd[nextHiddenState]!!
 			previousOutput = fwd[outNode]!!
-			outputArray.add(previousOutput.data)
+			outputArray.add(previousOutput.data().asFloat())
 		}
 
-		return Pair(hiddenState.data, outputArray.toTypedArray())
+		return Pair(hiddenState.data().asFloat(), outputArray.toTypedArray())
 	}
 }
